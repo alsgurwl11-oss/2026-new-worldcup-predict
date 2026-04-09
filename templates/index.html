@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2026 월드컵 예측기</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0a0a1a;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1a3e, #2d2d6b);
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid #4a4aff;
+        }
+
+        .header h1 {
+            font-size: 2em;
+            color: #fff;
+        }
+
+        .header p {
+            color: #aaa;
+            margin-top: 5px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #333;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            color: #aaa;
+            cursor: pointer;
+            font-size: 1em;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #4a4aff;
+            border-bottom-color: #4a4aff;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 경기 예측 탭 */
+        .predict-box {
+            background: #1a1a2e;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 20px;
+        }
+
+        .team-select {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .team-select select {
+            flex: 1;
+            padding: 12px;
+            background: #2d2d4e;
+            border: 1px solid #4a4aff;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1em;
+        }
+
+        .vs-text {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #4a4aff;
+        }
+
+        .predict-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #4a4aff, #7a4aff);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: opacity 0.3s;
+        }
+
+        .predict-btn:hover {
+            opacity: 0.9;
+        }
+
+        .result-box {
+            display: none;
+            background: #0d0d2e;
+            border-radius: 15px;
+            padding: 25px;
+            margin-top: 20px;
+            border: 1px solid #4a4aff;
+        }
+
+        .prob-bars {
+            margin: 20px 0;
+        }
+
+        .prob-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            gap: 10px;
+        }
+
+        .prob-label {
+            width: 100px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+
+        .prob-bar-bg {
+            flex: 1;
+            background: #333;
+            border-radius: 5px;
+            height: 25px;
+            overflow: hidden;
+        }
+
+        .prob-bar {
+            height: 100%;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            padding-left: 10px;
+            font-size: 0.9em;
+            font-weight: bold;
+            transition: width 0.8s ease;
+        }
+
+        .bar-home { background: linear-gradient(90deg, #4a4aff, #7a7aff); }
+        .bar-draw { background: linear-gradient(90deg, #ff9900, #ffbb44); }
+        .bar-away { background: linear-gradient(90deg, #ff4444, #ff7777); }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .info-card {
+            background: #1a1a3e;
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .info-card .label {
+            color: #aaa;
+            font-size: 0.8em;
+            margin-bottom: 5px;
+        }
+
+        .info-card .value {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #4a4aff;
+        }
+
+        /* 조별리그 탭 */
+        .group-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .group-btn {
+            padding: 8px 16px;
+            background: #1a1a2e;
+            border: 1px solid #4a4aff;
+            border-radius: 8px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .group-btn:hover, .group-btn.active {
+            background: #4a4aff;
+        }
+
+        .group-result {
+            background: #1a1a2e;
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .group-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .group-table th {
+            background: #2d2d4e;
+            padding: 12px;
+            text-align: left;
+            color: #aaa;
+            font-size: 0.9em;
+        }
+
+        .group-table td {
+            padding: 12px;
+            border-bottom: 1px solid #333;
+        }
+
+        .qualify-bar {
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 4px;
+        }
+
+        .qualify-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4a4aff, #00ff88);
+            border-radius: 4px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #aaa;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid #333;
+            border-top-color: #4a4aff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 전체 순위 탭 */
+        .ranking-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .ranking-table th {
+            background: #2d2d4e;
+            padding: 12px;
+            text-align: left;
+            color: #aaa;
+        }
+
+        .ranking-table td {
+            padding: 12px;
+            border-bottom: 1px solid #222;
+        }
+
+        .ranking-table tr:hover {
+            background: #1a1a3e;
+        }
+
+        .rank-num {
+            font-weight: bold;
+            color: #4a4aff;
+            width: 30px;
+        }
+
+        .prob-text {
+            font-weight: bold;
+        }
+
+        .prob-high { color: #00ff88; }
+        .prob-mid  { color: #ffbb44; }
+        .prob-low  { color: #ff7777; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>⚽ 2026 FIFA 월드컵 예측기</h1>
+    <p>XGBoost + 역대 데이터 기반 AI 예측 모델</p>
+</div>
+
+<div class="container">
+    <div class="tabs">
+        <button class="tab active" onclick="showTab('predict')">경기 예측</button>
+        <button class="tab" onclick="showTab('group')">조별리그 시뮬레이션</button>
+        <button class="tab" onclick="showTab('ranking')">전체 32강 확률</button>
+    </div>
+
+    <!-- 경기 예측 탭 -->
+    <div id="tab-predict" class="tab-content active">
+        <div class="predict-box">
+            <h2 style="margin-bottom: 20px;">⚽ 경기 예측</h2>
+            <div class="team-select">
+                <select id="home-team">
+                    <option value="">홈팀 선택</option>
+                    {% for group, teams in groups.items() %}
+                    <optgroup label="{{ group }}조">
+                        {% for team in teams %}
+                        <option value="{{ team }}">{{ team }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+                <span class="vs-text">VS</span>
+                <select id="away-team">
+                    <option value="">원정팀 선택</option>
+                    {% for group, teams in groups.items() %}
+                    <optgroup label="{{ group }}조">
+                        {% for team in teams %}
+                        <option value="{{ team }}">{{ team }}</option>
+                        {% endfor %}
+                    </optgroup>
+                    {% endfor %}
+                </select>
+            </div>
+            <button class="predict-btn" onclick="predictMatch()">예측하기</button>
+        </div>
+
+        <div class="result-box" id="result-box">
+            <h3 id="match-title" style="margin-bottom: 20px; text-align: center;"></h3>
+            <div class="prob-bars">
+                <div class="prob-row">
+                    <span class="prob-label" id="home-label">홈팀</span>
+                    <div class="prob-bar-bg">
+                        <div class="prob-bar bar-home" id="bar-home"></div>
+                    </div>
+                </div>
+                <div class="prob-row">
+                    <span class="prob-label">무승부</span>
+                    <div class="prob-bar-bg">
+                        <div class="prob-bar bar-draw" id="bar-draw"></div>
+                    </div>
+                </div>
+                <div class="prob-row">
+                    <span class="prob-label" id="away-label">원정팀</span>
+                    <div class="prob-bar-bg">
+                        <div class="prob-bar bar-away" id="bar-away"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="info-grid">
+                <div class="info-card">
+                    <div class="label">홈팀 FIFA 랭킹</div>
+                    <div class="value" id="home-rank">-</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">원정팀 FIFA 랭킹</div>
+                    <div class="value" id="away-rank">-</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">H2H 홈팀 승률</div>
+                    <div class="value" id="h2h-home">-</div>
+                </div>
+                <div class="info-card">
+                    <div class="label">H2H 원정팀 승률</div>
+                    <div class="value" id="h2h-away">-</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 조별리그 시뮬레이션 탭 -->
+    <div id="tab-group" class="tab-content">
+        <h2 style="margin-bottom: 20px;">🏆 조별리그 시뮬레이션</h2>
+        <div class="group-selector">
+            {% for group in groups.keys() %}
+            <button class="group-btn" onclick="simulateGroup('{{ group }}')">
+                {{ group }}조
+            </button>
+            {% endfor %}
+        </div>
+        <div class="group-result" id="group-result">
+            <p style="color: #aaa; text-align: center;">조를 선택하면 시뮬레이션 결과가 나와요</p>
+        </div>
+    </div>
+
+    <!-- 전체 32강 확률 탭 -->
+    <div id="tab-ranking" class="tab-content">
+        <h2 style="margin-bottom: 20px;">📊 전체 32강 진출 확률</h2>
+        <button class="predict-btn" onclick="simulateAll()" style="margin-bottom: 20px;">
+            전체 시뮬레이션 실행 (약 30초)
+        </button>
+        <div id="ranking-result">
+            <p style="color: #aaa; text-align: center;">버튼을 눌러 전체 시뮬레이션을 실행하세요</p>
+        </div>
+    </div>
+</div>
+
+<script>
+function showTab(name) {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    event.target.classList.add('active');
+}
+
+async function predictMatch() {
+    const home = document.getElementById('home-team').value;
+    const away = document.getElementById('away-team').value;
+
+    if (!home || !away) {
+        alert('팀을 선택해주세요!');
+        return;
+    }
+    if (home === away) {
+        alert('서로 다른 팀을 선택해주세요!');
+        return;
+    }
+
+    const res = await fetch('/api/predict', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({home, away})
+    });
+    const data = await res.json();
+
+    document.getElementById('match-title').textContent =
+        `${data.home} vs ${data.away}`;
+    document.getElementById('home-label').textContent = data.home;
+    document.getElementById('away-label').textContent = data.away;
+
+    document.getElementById('bar-home').style.width = data.home_win + '%';
+    document.getElementById('bar-home').textContent = data.home_win + '%';
+    document.getElementById('bar-draw').style.width = data.draw + '%';
+    document.getElementById('bar-draw').textContent = data.draw + '%';
+    document.getElementById('bar-away').style.width = data.away_win + '%';
+    document.getElementById('bar-away').textContent = data.away_win + '%';
+
+    document.getElementById('home-rank').textContent = data.home_rank + '위';
+    document.getElementById('away-rank').textContent = data.away_rank + '위';
+    document.getElementById('h2h-home').textContent = data.h2h_home + '%';
+    document.getElementById('h2h-away').textContent = data.h2h_away + '%';
+
+    document.getElementById('result-box').style.display = 'block';
+}
+
+async function simulateGroup(group) {
+    document.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+
+    document.getElementById('group-result').innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>${group}조 시뮬레이션 중...</p>
+        </div>`;
+
+    const res = await fetch('/api/simulate_group', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({group})
+    });
+    const data = await res.json();
+
+    let html = `
+        <h3 style="margin-bottom: 15px;">${group}조 시뮬레이션 결과</h3>
+        <table class="group-table">
+            <thead>
+                <tr>
+                    <th>팀</th>
+                    <th>FIFA 랭킹</th>
+                    <th>1위</th>
+                    <th>2위</th>
+                    <th>3위</th>
+                    <th>4위</th>
+                    <th>32강 진출</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+    data.result.forEach(team => {
+        const qualifyColor = team.qualify >= 70 ? '#00ff88' :
+                             team.qualify >= 40 ? '#ffbb44' : '#ff7777';
+        html += `
+            <tr>
+                <td><strong>${team.team}</strong></td>
+                <td style="color: #aaa;">${team.rank}위</td>
+                <td>${team.first}%</td>
+                <td>${team.second}%</td>
+                <td>${team.third}%</td>
+                <td>${team.fourth}%</td>
+                <td>
+                    <strong style="color: ${qualifyColor}">${team.qualify}%</strong>
+                    <div class="qualify-bar">
+                        <div class="qualify-fill" style="width: ${team.qualify}%"></div>
+                    </div>
+                </td>
+            </tr>`;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('group-result').innerHTML = html;
+}
+
+async function simulateAll() {
+    document.getElementById('ranking-result').innerHTML = `
+        <div class="loading">
+            <div class="spinner"></div>
+            <p>전체 시뮬레이션 중... (약 30초)</p>
+        </div>`;
+
+    const res = await fetch('/api/simulate_all');
+    const data = await res.json();
+
+    let allTeams = [];
+    Object.values(data).forEach(group => {
+        group.forEach(team => allTeams.push(team));
+    });
+    allTeams.sort((a, b) => b.qualify - a.qualify);
+
+    let html = `
+        <table class="ranking-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>팀</th>
+                    <th>FIFA 랭킹</th>
+                    <th>32강 진출 확률</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+    allTeams.forEach((team, idx) => {
+        const probClass = team.qualify >= 70 ? 'prob-high' :
+                          team.qualify >= 40 ? 'prob-mid' : 'prob-low';
+        html += `
+            <tr>
+                <td class="rank-num">${idx + 1}</td>
+                <td>${team.team}</td>
+                <td style="color: #aaa;">${team.rank}위</td>
+                <td>
+                    <span class="prob-text ${probClass}">${team.qualify}%</span>
+                    <div class="qualify-bar">
+                        <div class="qualify-fill" style="width: ${team.qualify}%"></div>
+                    </div>
+                </td>
+            </tr>`;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('ranking-result').innerHTML = html;
+}
+</script>
+</body>
+</html>

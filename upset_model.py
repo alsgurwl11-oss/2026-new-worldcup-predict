@@ -10,7 +10,11 @@
 
 import pandas as pd
 import numpy as np
-from config import GROUPS_2026, TEAM_STRENGTH_FC25
+from config import (
+    GROUPS_2026, TEAM_STRENGTH_FC25,
+    TEAM_OVERALL_STRENGTH, TEAM_INJURY_INDEX,
+    TEAM_FORM_INDEX, TEAM_MARKET_STRENGTH
+)
 
 # ================================
 # 1. 데이터 기반 상수 (분석 결과)
@@ -306,6 +310,43 @@ def calculate_uvi(
     # 원맨팀 보정 (최대 +0.1)
     uvi += key_man_factor * 0.1
     uvi  = min(round(uvi, 3), 1.0)
+
+    # ⑦ Transfermarkt 종합 강도 차이
+    fav_strength = TEAM_OVERALL_STRENGTH.get(favorite, 0.35)
+    und_strength = TEAM_OVERALL_STRENGTH.get(underdog, 0.35)
+    strength_gap = max(fav_strength - und_strength, 0)
+
+    # 강도 차이가 작을수록 이변 가능성 UP
+    strength_factor = 1 - min(strength_gap * 2, 1.0)
+
+    # ⑧ 부상 취약도 (강팀 부상이 많으면 이변 UP)
+    fav_injury = TEAM_INJURY_INDEX.get(favorite, 0.3)
+    injury_factor = fav_injury
+
+    # 최종 UVI 재계산
+    uvi = (
+        xg_factor          * 0.25 +
+        shooting_factor    * 0.20 +
+        possession_factor  * 0.15 +
+        round_factor       * 0.10 +
+        desperation_factor * 0.10 +
+        strength_factor    * 0.10 +
+        injury_factor      * 0.10
+    )
+
+    uvi += key_man_factor * 0.05
+    uvi  = min(round(uvi, 3), 1.0)
+
+    factors = {
+        'xg_gap':       round(xg_factor, 3),
+        'shooting':     round(shooting_factor, 3),
+        'tactical':     round(possession_factor, 3),
+        'round':        round(round_factor, 3),
+        'desperation':  round(desperation_factor, 3),
+        'strength_gap': round(strength_factor, 3),
+        'injury':       round(injury_factor, 3),
+        'key_man':      round(key_man_factor, 3),
+    }
 
     # 요소별 점수
     factors = {

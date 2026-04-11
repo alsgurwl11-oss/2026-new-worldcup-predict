@@ -12,7 +12,9 @@ from config import (
     NAME_MAP, CONTINENT_MAP, HOST_MAP, PREV_CHAMPIONS,
     SOUTH_AMERICA_HOSTS, EUROPE_HOSTS, GROUPS_2026,
     XGB_PARAMS, DATA_FILES, PREDICT_DATE,
-    TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED
+    TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED,TEAM_OVERALL_STRENGTH,
+    TEAM_INJURY_INDEX,
+    TEAM_FORM_INDEX,
 )
 
 # ================================
@@ -245,7 +247,6 @@ def build_features(wc_df, df, ranking, continent_winrate):
         h_penalty = get_host_continent_penalty(h_cont, date)
         a_penalty = get_host_continent_penalty(a_cont, date)
 
-        features.append
         # FC25 선수 능력치
         h_fc25     = get_fc25_strength(home)
         a_fc25     = get_fc25_strength(away)
@@ -298,6 +299,16 @@ def build_features(wc_df, df, ranking, continent_winrate):
             'away_fc25_strength': a_fc25,
             'top23_diff':         h_top23 - a_top23,
             'top11_diff':         h_top11 - a_top11,
+
+            # Transfermarkt 데이터 기반 피처
+            'home_overall_strength': TEAM_OVERALL_STRENGTH.get(home, 0.35),
+            'away_overall_strength': TEAM_OVERALL_STRENGTH.get(away, 0.35),
+            'overall_strength_diff': TEAM_OVERALL_STRENGTH.get(home, 0.35) - TEAM_OVERALL_STRENGTH.get(away, 0.35),
+            'home_injury_index':     TEAM_INJURY_INDEX.get(home, 0.3),
+            'away_injury_index':     TEAM_INJURY_INDEX.get(away, 0.3),
+            'home_form_index':       TEAM_FORM_INDEX.get(home, 0.4),
+            'away_form_index':       TEAM_FORM_INDEX.get(away, 0.4),
+            'form_index_diff':       TEAM_FORM_INDEX.get(home, 0.4) - TEAM_FORM_INDEX.get(away, 0.4),
         })
         
 

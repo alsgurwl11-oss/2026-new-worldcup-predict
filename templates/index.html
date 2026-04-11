@@ -166,60 +166,9 @@
         <div class="group-result" id="group-result">
             <p style="color:#aaa; text-align:center; padding:30px;">조를 선택하면 시뮬레이션 결과가 나와요 😊</p>
         </div>
-        async function loadGroupMatches(group, btn) {
-    document.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-
-    document.getElementById('group-result').innerHTML = `
-        <div class="loading"><div class="spinner"></div><p>${group}조 경기 예측 중...</p></div>`;
-
-    const res  = await fetch('/api/group_matches', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({group})
-    });
-    const data = await res.json();
-
-    let html = `<h3 style="margin-bottom:15px;">${group}조 경기별 예측</h3>`;
-
-    data.matches.forEach((match, idx) => {
-        const homeClass = match.home_win >= match.away_win ? 'prob-high' : 'prob-low';
-        const awayClass = match.away_win > match.home_win  ? 'prob-high' : 'prob-low';
-        html += `
-            <div style="background:#0d0d2e; border-radius:12px; padding:20px; margin-bottom:15px; border:1px solid #333;">
-                <div style="text-align:center; margin-bottom:15px; color:#aaa; font-size:0.85em;">경기 ${idx+1}</div>
-                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px;">
-                    <div style="text-align:center; flex:1;">
-                        <div style="font-weight:bold; font-size:1.1em;">${match.home}</div>
-                        <div style="color:#aaa; font-size:0.8em;">FIFA ${match.home_rank}위</div>
-                    </div>
-                    <div style="font-size:1.3em; font-weight:bold; color:#4a4aff; padding:0 15px;">VS</div>
-                    <div style="text-align:center; flex:1;">
-                        <div style="font-weight:bold; font-size:1.1em;">${match.away}</div>
-                        <div style="color:#aaa; font-size:0.8em;">FIFA ${match.away_rank}위</div>
-                    </div>
-                </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center;">
-                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
-                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">홈팀 승</div>
-                        <div class="${homeClass}" style="font-size:1.3em;">${match.home_win}%</div>
-                    </div>
-                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
-                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">무승부</div>
-                        <div style="font-size:1.3em; color:#ffbb44; font-weight:bold;">${match.draw}%</div>
-                    </div>
-                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
-                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">원정팀 승</div>
-                        <div class="${awayClass}" style="font-size:1.3em;">${match.away_win}%</div>
-                    </div>
-                </div>
-            </div>`;
-    });
-
-    document.getElementById('group-result').innerHTML = html;
-}
     </div>
 
+    <!-- ③ 32강 확률 -->
     <!-- ③ 32강 확률 -->
     <div id="tab-ranking" class="tab-content">
         <h2 style="margin-bottom:15px;">📈 전체 32강 진출 확률</h2>
@@ -286,7 +235,8 @@
 function showTab(name, btn) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.getElementById('tab-' + name).classList.add('active');
+    const target = document.getElementById('tab-' + name);
+    if (target) target.classList.add('active');
     if (btn) btn.classList.add('active');
 }
 
@@ -658,13 +608,15 @@ async function loadUpsetAnalysis() {
 
         // 주요 이변 요인 찾기
         const factorNames = {
-            'xg_gap':      'xG 박빙',
-            'shooting':    '슈팅 효율',
-            'tactical':    '전술 상성',
-            'round':       '라운드 특성',
-            'desperation': '절박도',
-            'key_man':     '원맨팀',
-        };
+            'xg_gap':       'xG 박빙',
+            'shooting':     '슈팅 효율',
+            'tactical':     '전술 상성',
+            'round':        '라운드 특성',
+            'desperation':  '절박도',
+            'strength_gap': '전력 차이',
+            'injury':       '부상 취약도',
+            'key_man':      '원맨팀',
+    };
 
         const topFactor = Object.entries(factors)
             .sort((a, b) => b[1] - a[1])

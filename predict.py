@@ -6,7 +6,8 @@ import pandas as pd
 import numpy as np
 from config import (
     OPTA_WIN_PROB, BETTING_ODDS, ENSEMBLE_WEIGHTS,
-    GROUPS_2026, TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED
+    GROUPS_2026, TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED,
+    TEAM_OVERALL_STRENGTH, TEAM_INJURY_INDEX, TEAM_FORM_INDEX
 )
 
 # ================================
@@ -79,6 +80,15 @@ def predict_ml(home, away, neutral, team_cache, h2h_cache,
         'away_fc25_strength': ac.get('fc25_strength', 0.75),
         'top23_diff':         hc.get('fc25_top23', 65.0) - ac.get('fc25_top23', 65.0),
         'top11_diff':         hc.get('fc25_top11', 68.0) - ac.get('fc25_top11', 68.0),
+        # Transfermarkt 데이터 기반 피처
+        'home_overall_strength': TEAM_OVERALL_STRENGTH.get(home, 0.35),
+        'away_overall_strength': TEAM_OVERALL_STRENGTH.get(away, 0.35),
+        'overall_strength_diff': TEAM_OVERALL_STRENGTH.get(home, 0.35) - TEAM_OVERALL_STRENGTH.get(away, 0.35),
+        'home_injury_index':     TEAM_INJURY_INDEX.get(home, 0.3),
+        'away_injury_index':     TEAM_INJURY_INDEX.get(away, 0.3),
+        'home_form_index':       TEAM_FORM_INDEX.get(home, 0.4),
+        'away_form_index':       TEAM_FORM_INDEX.get(away, 0.4),
+        'form_index_diff':       TEAM_FORM_INDEX.get(home, 0.4) - TEAM_FORM_INDEX.get(away, 0.4),
     }])
 
     available = [f for f in top_features if f in feat.columns]

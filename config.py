@@ -333,3 +333,78 @@ TEAM_STRENGTH_NORMALIZED = {
     team: round(vals['top23'] / _max_strength, 4)
     for team, vals in TEAM_STRENGTH_FC25.items()
 }
+# ================================
+# Transfermarkt 데이터 기반 팀 강도
+# analysis.py 실행 결과 (2026.04)
+# ================================
+TEAM_MARKET_STRENGTH = {
+    'England': 1.0, 'France': 0.8189, 'Spain': 0.8942,
+    'Brazil': 0.717, 'Portugal': 0.5699, 'Argentina': 0.5337,
+    'Netherlands': 0.5326, 'Germany': 0.5014, 'Belgium': 0.361,
+    'Sweden': 0.3156, 'Norway': 0.3142, 'Colombia': 0.1928,
+    'United States': 0.2602, 'Croatia': 0.178, 'Uruguay': 0.1574,
+    'Austria': 0.134, 'Senegal': 0.1571, 'Japan': 0.1939,
+    'Switzerland': 0.168, 'Czech Republic': 0.1025, 'Mexico': 0.1106,
+    'Scotland': 0.1123, 'Canada': 0.1216, 'Ecuador': 0.1686,
+    'Bosnia and Herzegovina': 0.0527, 'Ghana': 0.1192, 'Paraguay': 0.0689,
+    'South Korea': 0.0856, 'Algeria': 0.0468, 'Jordan': 0.0084,
+    'Morocco': 0.057, 'Australia': 0.0383, 'Uzbekistan': 0.0314,
+    'Iran': 0.0177, 'Curacao': 0.0027, 'Egypt': 0.0458,
+    'Iraq': 0.0046, 'Panama': 0.0188, 'Haiti': 0.0049,
+    'Tunisia': 0.0088, 'New Zealand': 0.0127, 'Cape Verde': 0.0061,
+    'South Africa': 0.0141, 'Saudi Arabia': 0.0117, 'Qatar': 0.0085,
+}
+
+TEAM_FORM_INDEX = {
+    'England': 1.0, 'France': 0.8969, 'Spain': 0.7264,
+    'Brazil': 0.8283, 'Portugal': 0.711, 'Argentina': 0.7257,
+    'Netherlands': 0.6895, 'Germany': 0.8065, 'Belgium': 0.6806,
+    'Sweden': 0.5092, 'Norway': 0.5324, 'Colombia': 0.5088,
+    'United States': 0.5245, 'Croatia': 0.4825, 'Uruguay': 0.4772,
+    'Austria': 0.4745, 'Senegal': 0.4085, 'Japan': 0.4485,
+    'Switzerland': 0.4069, 'Czech Republic': 0.4636, 'Mexico': 0.5018,
+    'Scotland': 0.5401, 'Canada': 0.3451, 'Ecuador': 0.2844,
+    'Bosnia and Herzegovina': 0.3821, 'Ghana': 0.3826, 'Paraguay': 0.2615,
+    'South Korea': 0.323, 'Algeria': 0.2788, 'Jordan': 0.1678,
+    'Morocco': 0.2238, 'Australia': 0.3201, 'Uzbekistan': 0.1498,
+    'Iran': 0.2201, 'Curacao': 0.0478, 'Egypt': 0.2643,
+    'Iraq': 0.1366, 'Panama': 0.1917, 'Haiti': 0.1401,
+    'Tunisia': 0.1192, 'New Zealand': 0.1724, 'Cape Verde': 0.1146,
+    'South Africa': 0.1195, 'Saudi Arabia': 0.1061, 'Qatar': 0.114,
+}
+
+TEAM_INJURY_INDEX = {
+    'England': 0.585, 'France': 0.591, 'Spain': 0.51,
+    'Brazil': 0.528, 'Portugal': 0.352, 'Argentina': 0.413,
+    'Netherlands': 0.443, 'Germany': 0.747, 'Belgium': 0.368,
+    'Sweden': 0.353, 'Norway': 0.423, 'Colombia': 0.275,
+    'United States': 0.428, 'Croatia': 0.315, 'Uruguay': 0.292,
+    'Austria': 0.349, 'Senegal': 0.307, 'Japan': 0.431,
+    'Switzerland': 0.342, 'Czech Republic': 0.331, 'Mexico': 0.405,
+    'Scotland': 0.52, 'Canada': 0.289, 'Ecuador': 0.282,
+    'Bosnia and Herzegovina': 0.262, 'Ghana': 0.383, 'Paraguay': 0.216,
+    'South Korea': 0.353, 'Algeria': 0.251, 'Jordan': 0.111,
+    'Morocco': 0.278, 'Australia': 0.41, 'Uzbekistan': 0.164,
+    'Iran': 0.258, 'Curacao': 0.0, 'Egypt': 0.374,
+    'Iraq': 0.137, 'Panama': 0.265, 'Haiti': 0.199,
+    'Tunisia': 0.192, 'New Zealand': 0.3, 'Cape Verde': 0.242,
+    'South Africa': 0.335, 'Saudi Arabia': 0.379, 'Qatar': 0.482,
+}
+
+TEAM_OVERALL_STRENGTH = {
+    'England': 0.8538, 'France': 0.7437, 'Spain': 0.7344,
+    'Brazil': 0.6947, 'Portugal': 0.6388, 'Argentina': 0.6142,
+    'Netherlands': 0.5936, 'Germany': 0.5461, 'Belgium': 0.5406,
+    'Sweden': 0.4662, 'Norway': 0.4563, 'Colombia': 0.4364,
+    'United States': 0.4307, 'Croatia': 0.4113, 'Uruguay': 0.407,
+    'Austria': 0.3824, 'Senegal': 0.3791, 'Japan': 0.3768,
+    'Switzerland': 0.3741, 'Czech Republic': 0.3705, 'Mexico': 0.3686,
+    'Scotland': 0.354, 'Canada': 0.3472, 'Ecuador': 0.3465,
+    'Bosnia and Herzegovina': 0.3393, 'Ghana': 0.3358, 'Paraguay': 0.3151,
+    'South Korea': 0.309, 'Algeria': 0.3036, 'Jordan': 0.2843,
+    'Morocco': 0.2816, 'Australia': 0.2749, 'Uzbekistan': 0.274,
+    'Iran': 0.2696, 'Curacao': 0.2678, 'Egypt': 0.2673,
+    'Iraq': 0.2654, 'Panama': 0.2584, 'Haiti': 0.2512,
+    'Tunisia': 0.2472, 'New Zealand': 0.2404, 'Cape Verde': 0.232,
+    'South Africa': 0.2137, 'Saudi Arabia': 0.1971, 'Qatar': 0.1728,
+}

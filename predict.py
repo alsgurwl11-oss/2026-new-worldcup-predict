@@ -6,7 +6,7 @@ import pandas as pd
 import numpy as np
 from config import (
     OPTA_WIN_PROB, BETTING_ODDS, ENSEMBLE_WEIGHTS,
-    GROUPS_2026
+    GROUPS_2026, TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED
 )
 
 # ================================
@@ -36,10 +36,7 @@ def calculate_elo_prob(home_str, away_str):
 
 def predict_ml(home, away, neutral, team_cache, h2h_cache,
                continent_winrate, model, top_features):
-    """
-    XGBoost ML 모델 예측
-    반환: [away_prob, draw_prob, home_prob]
-    """
+    """XGBoost ML 모델 예측"""
     hc = team_cache.get(home)
     ac = team_cache.get(away)
 
@@ -56,77 +53,67 @@ def predict_ml(home, away, neutral, team_cache, h2h_cache,
     cont_adv = continent_winrate.get((hc['cont'], ac['cont']), 0.33)
 
     feat = pd.DataFrame([{
-        'fpoints_diff':      hc['fpoints'] - ac['fpoints'],
-        'rank_diff':         ac['rank'] - hc['rank'],
-        'is_neutral':        int(neutral),
-        'home_is_host':      hc.get('is_host_2026', 0),
-        'away_is_host':      ac.get('is_host_2026', 0),
-        'cont_advantage':    cont_adv,
-        'host_cont_penalty': hc['penalty'] - ac['penalty'],
-        'h2h_advantage':     h2h_home - h2h_away,
-        'h2h_home_wr':       h2h_home,
-        'home_wc_exp':       hc['exp'],
-        'away_wc_exp':       ac['exp'],
-        'exp_diff':          hc['exp'] - ac['exp'],
-        'form_diff':         hc['form'] - ac['form'],
-        'home_form':         hc['form'],
-        'away_form':         ac['form'],
-        'gf_diff':           hc['gf'] - ac['gf'],
-        'ga_diff':           hc['ga'] - ac['ga'],
-        'home_gf':           hc['gf'],
-        'away_gf':           ac['gf'],
-        'home_defending':    0,
-        'away_defending':    0,
+        'fpoints_diff':       hc['fpoints'] - ac['fpoints'],
+        'rank_diff':          ac['rank'] - hc['rank'],
+        'is_neutral':         int(neutral),
+        'home_is_host':       hc.get('is_host_2026', 0),
+        'away_is_host':       ac.get('is_host_2026', 0),
+        'cont_advantage':     cont_adv,
+        'host_cont_penalty':  hc['penalty'] - ac['penalty'],
+        'h2h_advantage':      h2h_home - h2h_away,
+        'h2h_home_wr':        h2h_home,
+        'home_wc_exp':        hc['exp'],
+        'away_wc_exp':        ac['exp'],
+        'exp_diff':           hc['exp'] - ac['exp'],
+        'form_diff':          hc['form'] - ac['form'],
+        'home_form':          hc['form'],
+        'away_form':          ac['form'],
+        'gf_diff':            hc['gf'] - ac['gf'],
+        'ga_diff':            hc['ga'] - ac['ga'],
+        'home_gf':            hc['gf'],
+        'away_gf':            ac['gf'],
+        'home_defending':     0,
+        'away_defending':     0,
+        'fc25_strength_diff': hc.get('fc25_strength', 0.75) - ac.get('fc25_strength', 0.75),
+        'home_fc25_strength': hc.get('fc25_strength', 0.75),
+        'away_fc25_strength': ac.get('fc25_strength', 0.75),
+        'top23_diff':         hc.get('fc25_top23', 65.0) - ac.get('fc25_top23', 65.0),
+        'top11_diff':         hc.get('fc25_top11', 68.0) - ac.get('fc25_top11', 68.0),
     }])
 
-    # top_features에 있는 컬럼만 사용
     available = [f for f in top_features if f in feat.columns]
     return model.predict_proba(feat[available])[0].tolist()
 
 def predict_opta(home, away):
-    """
-    Opta 강도 기반 예측
-    반환: (home_prob, draw_prob, away_prob)
-    """
+    """Opta 강도 기반 예측"""
     h_str = get_opta_strength(home)
     a_str = get_opta_strength(away)
     total = h_str + a_str + 0.001
-
     h = h_str / total
     a = a_str / total
     d = 0.25
-
     s = h + d + a
     return h/s, d/s, a/s
 
 def predict_betting(home, away):
-    """
-    배당률 역산 기반 예측
-    반환: (home_prob, draw_prob, away_prob)
-    """
+    """배당률 역산 기반 예측"""
     h_str = get_betting_strength(home)
     a_str = get_betting_strength(away)
     total = h_str + a_str + 0.001
-
     h = h_str / total
     a = a_str / total
     d = 0.25
-
     s = h + d + a
     return h/s, d/s, a/s
 
 def predict_elo(home, away):
-    """
-    ELO 레이팅 기반 예측
-    반환: (home_prob, draw_prob, away_prob)
-    """
-    h_str    = get_opta_strength(home)
-    a_str    = get_opta_strength(away)
-    elo_hw   = calculate_elo_prob(h_str, a_str)
-    elo_aw   = 1 - elo_hw
-    d        = 0.25
-
-    s = elo_hw + d + elo_aw
+    """ELO 레이팅 기반 예측"""
+    h_str  = get_opta_strength(home)
+    a_str  = get_opta_strength(away)
+    elo_hw = calculate_elo_prob(h_str, a_str)
+    elo_aw = 1 - elo_hw
+    d      = 0.25
+    s      = elo_hw + d + elo_aw
     return elo_hw/s, d/s, elo_aw/s
 
 # ================================
@@ -136,37 +123,24 @@ def predict_elo(home, away):
 def ensemble_predict(home, away, team_cache, h2h_cache,
                      continent_winrate, model, top_features,
                      neutral=True):
-    """
-    앙상블 최종 예측
-    ML(35%) + Opta(30%) + 배당률(25%) + ELO(10%)
-
-    반환:
-        dict {
-            home_win, draw, away_win,  ← 최종 확률 (%)
-            detail: {ml, opta, betting, elo}  ← 소스별 확률
-        }
-    """
+    """앙상블 최종 예측: ML(35%) + Opta(30%) + 배당률(25%) + ELO(10%)"""
     W = ENSEMBLE_WEIGHTS
 
-    # 1. 각 소스별 예측
     ml_probs = predict_ml(
         home, away, neutral,
         team_cache, h2h_cache,
         continent_winrate, model, top_features
     )
-    ml_h, ml_d, ml_a = ml_probs[2], ml_probs[1], ml_probs[0]
+    ml_h, ml_d, ml_a       = ml_probs[2], ml_probs[1], ml_probs[0]
+    opta_h, opta_d, opta_a = predict_opta(home, away)
+    bet_h,  bet_d,  bet_a  = predict_betting(home, away)
+    elo_h,  elo_d,  elo_a  = predict_elo(home, away)
 
-    opta_h, opta_d, opta_a     = predict_opta(home, away)
-    bet_h,  bet_d,  bet_a      = predict_betting(home, away)
-    elo_h,  elo_d,  elo_a      = predict_elo(home, away)
-
-    # 2. 가중 앙상블
     fh = ml_h*W['ml'] + opta_h*W['opta'] + bet_h*W['betting'] + elo_h*W['elo']
     fd = ml_d*W['ml'] + opta_d*W['opta'] + bet_d*W['betting'] + elo_d*W['elo']
     fa = ml_a*W['ml'] + opta_a*W['opta'] + bet_a*W['betting'] + elo_a*W['elo']
 
-    # 3. 정규화
-    total = fh + fd + fa
+    total      = fh + fd + fa
     fh, fd, fa = fh/total, fd/total, fa/total
 
     return {
@@ -187,10 +161,7 @@ def ensemble_predict(home, away, team_cache, h2h_cache,
 
 def get_win_prob_pure(home, away, team_cache, h2h_cache,
                       continent_winrate, model, top_features):
-    """
-    무승부 없는 순수 승리 확률
-    (연장/승부차기 포함 토너먼트용)
-    """
+    """무승부 없는 순수 승리 확률 (연장/승부차기 포함)"""
     result     = ensemble_predict(
         home, away, team_cache, h2h_cache,
         continent_winrate, model, top_features
@@ -198,12 +169,9 @@ def get_win_prob_pure(home, away, team_cache, h2h_cache,
     home_win   = result['home_win'] / 100
     draw       = result['draw'] / 100
     away_win   = result['away_win'] / 100
-
-    # 무승부 → 50/50 승부차기
     home_total = home_win + draw * 0.5
     away_total = away_win + draw * 0.5
     total      = home_total + away_total
-
     return home_total / total, away_total / total
 
 # ================================
@@ -212,9 +180,7 @@ def get_win_prob_pure(home, away, team_cache, h2h_cache,
 
 def predict_group_matches(group_name, team_cache, h2h_cache,
                           continent_winrate, model, top_features):
-    """
-    특정 조의 모든 경기 예측 반환
-    """
+    """특정 조의 모든 경기 예측 반환"""
     teams   = GROUPS_2026[group_name]
     matches = []
 
@@ -246,16 +212,11 @@ def predict_group_matches(group_name, team_cache, h2h_cache,
 
 def get_team_analysis(team, team_cache, h2h_cache,
                       continent_winrate, model, top_features):
-    """
-    특정 팀의 상세 분석 반환
-    - 팀 기본 정보
-    - 조별 예상 상대별 승률
-    """
+    """특정 팀의 상세 분석 반환"""
     tc = team_cache.get(team)
     if tc is None:
         return None
 
-    # 같은 조 팀 찾기
     group_name  = None
     group_teams = []
     for gn, teams in GROUPS_2026.items():
@@ -264,7 +225,6 @@ def get_team_analysis(team, team_cache, h2h_cache,
             group_teams = [t for t in teams if t != team]
             break
 
-    # 조별 상대팀 예측
     matchups = []
     for opponent in group_teams:
         result = ensemble_predict(
@@ -272,11 +232,11 @@ def get_team_analysis(team, team_cache, h2h_cache,
             continent_winrate, model, top_features
         )
         matchups.append({
-            'opponent':  opponent,
-            'opp_rank':  team_cache.get(opponent, {}).get('rank', 99),
-            'win':       result['home_win'],
-            'draw':      result['draw'],
-            'lose':      result['away_win'],
+            'opponent': opponent,
+            'opp_rank': team_cache.get(opponent, {}).get('rank', 99),
+            'win':      result['home_win'],
+            'draw':     result['draw'],
+            'lose':     result['away_win'],
         })
 
     return {
@@ -292,5 +252,12 @@ def get_team_analysis(team, team_cache, h2h_cache,
         'avg_ga':     round(tc.get('ga', 0), 2),
         'opta_prob':  round(get_opta_strength(team) * 100, 2),
         'bet_prob':   round(get_betting_strength(team) * 100, 2),
+        'fc25_top23': tc.get('fc25_top23', 65.0),
+        'fc25_top11': tc.get('fc25_top11', 68.0),
+        'fc25_rank':  sorted(
+            TEAM_STRENGTH_FC25.keys(),
+            key=lambda x: TEAM_STRENGTH_FC25[x]['top23'],
+            reverse=True
+        ).index(team) + 1 if team in TEAM_STRENGTH_FC25 else 99,
         'matchups':   matchups,
     }

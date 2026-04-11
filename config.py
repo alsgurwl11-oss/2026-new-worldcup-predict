@@ -270,3 +270,66 @@ DATA_FILES = {
 # 예측 기준 날짜
 # --------------------------------
 PREDICT_DATE = '2024-06-20'
+
+# --------------------------------
+# FC25 선수 능력치 기반 팀 전력
+# 출처: FC25 players_info.csv
+# TOP23: 상위 23명 평균 / TOP11: 상위 11명 평균
+# --------------------------------
+TEAM_STRENGTH_FC25 = {
+    'France':                 {'top23': 84.65, 'top11': 86.45},
+    'England':                {'top23': 84.52, 'top11': 86.55},
+    'Brazil':                 {'top23': 84.39, 'top11': 86.64},
+    'Germany':                {'top23': 84.30, 'top11': 86.55},
+    'Spain':                  {'top23': 84.13, 'top11': 85.55},
+    'Argentina':              {'top23': 83.52, 'top11': 85.45},
+    'Portugal':               {'top23': 83.52, 'top11': 85.82},
+    'Netherlands':            {'top23': 82.17, 'top11': 84.09},
+    'Belgium':                {'top23': 80.65, 'top11': 83.18},
+    'Uruguay':                {'top23': 79.04, 'top11': 82.00},
+    'Switzerland':            {'top23': 78.65, 'top11': 81.82},
+    'Croatia':                {'top23': 78.35, 'top11': 80.91},
+    'Austria':                {'top23': 78.13, 'top11': 80.55},
+    'Morocco':                {'top23': 78.00, 'top11': 80.55},
+    'Colombia':               {'top23': 77.48, 'top11': 79.18},
+    'Turkey':                 {'top23': 77.43, 'top11': 79.45},
+    'Ivory Coast':            {'top23': 77.22, 'top11': 79.00},
+    'Egypt':                  {'top23': 76.83, 'top11': 76.83},
+    'Japan':                  {'top23': 76.65, 'top11': 79.18},
+    'Norway':                 {'top23': 76.52, 'top11': 79.64},
+    'Senegal':                {'top23': 76.35, 'top11': 78.64},
+    'Sweden':                 {'top23': 76.09, 'top11': 78.73},
+    'Algeria':                {'top23': 75.96, 'top11': 78.55},
+    'Scotland':               {'top23': 75.87, 'top11': 78.36},
+    'Czech Republic':         {'top23': 75.83, 'top11': 77.27},
+    'United States':          {'top23': 75.83, 'top11': 77.64},
+    'Ghana':                  {'top23': 75.70, 'top11': 77.91},
+    'South Korea':            {'top23': 74.61, 'top11': 77.27},
+    'Ecuador':                {'top23': 74.26, 'top11': 76.64},
+    'Paraguay':               {'top23': 74.00, 'top11': 75.45},
+    'Bosnia and Herzegovina': {'top23': 73.22, 'top11': 76.00},
+    'Canada':                 {'top23': 72.13, 'top11': 74.91},
+    'Mexico':                 {'top23': 71.13, 'top11': 76.27},
+    'Australia':              {'top23': 71.09, 'top11': 73.00},
+    'Saudi Arabia':           {'top23': 71.04, 'top11': 73.91},
+    'Iran':                   {'top23': 70.62, 'top11': 70.62},
+    'Tunisia':                {'top23': 69.61, 'top11': 72.45},
+    'Panama':                 {'top23': 68.73, 'top11': 68.73},
+    'New Zealand':            {'top23': 67.43, 'top11': 69.55},
+    'Haiti':                  {'top23': 66.67, 'top11': 66.67},
+    'Qatar':                  {'top23': 65.00, 'top11': 68.00},
+    'Curacao':                {'top23': 65.00, 'top11': 68.00},
+    'Cape Verde':             {'top23': 65.00, 'top11': 68.00},
+    'Jordan':                 {'top23': 65.00, 'top11': 68.00},
+    'Uzbekistan':             {'top23': 65.00, 'top11': 68.00},
+    'Iraq':                   {'top23': 63.78, 'top11': 63.78},
+    'South Africa':           {'top23': 62.64, 'top11': 65.64},
+}
+
+# 정규화된 팀 강도 (0~1)
+# TOP23 평균 기준, 최고팀(프랑스 84.65) 대비 비율
+_max_strength = 84.65
+TEAM_STRENGTH_NORMALIZED = {
+    team: round(vals['top23'] / _max_strength, 4)
+    for team, vals in TEAM_STRENGTH_FC25.items()
+}

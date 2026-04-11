@@ -11,7 +11,8 @@ from xgboost import XGBClassifier
 from config import (
     NAME_MAP, CONTINENT_MAP, HOST_MAP, PREV_CHAMPIONS,
     SOUTH_AMERICA_HOSTS, EUROPE_HOSTS, GROUPS_2026,
-    XGB_PARAMS, DATA_FILES, PREDICT_DATE
+    XGB_PARAMS, DATA_FILES, PREDICT_DATE,
+    TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED
 )
 
 # ================================
@@ -63,6 +64,18 @@ def get_host_continent_penalty(team_cont, date):
     if team_cont == 'UEFA' and year in SOUTH_AMERICA_HOSTS:   return -0.1
     if team_cont == 'CONMEBOL' and year in EUROPE_HOSTS:      return -0.1
     return 0.0
+
+def get_fc25_strength(team):
+    """FC25 선수 능력치 기반 팀 강도"""
+    return TEAM_STRENGTH_NORMALIZED.get(team, 0.75)
+
+def get_fc25_top23(team):
+    """FC25 TOP23 평균 능력치"""
+    return TEAM_STRENGTH_FC25.get(team, {}).get('top23', 65.0)
+
+def get_fc25_top11(team):
+    """FC25 TOP11 평균 능력치"""
+    return TEAM_STRENGTH_FC25.get(team, {}).get('top11', 68.0)
 
 def get_fifa_rank(team, date, ranking):
     """특정 날짜 기준 FIFA 랭킹 반환"""
@@ -232,6 +245,15 @@ def build_features(wc_df, df, ranking, continent_winrate):
         h_penalty = get_host_continent_penalty(h_cont, date)
         a_penalty = get_host_continent_penalty(a_cont, date)
 
+        features.append
+        # FC25 선수 능력치
+        h_fc25     = get_fc25_strength(home)
+        a_fc25     = get_fc25_strength(away)
+        h_top23    = get_fc25_top23(home)
+        a_top23    = get_fc25_top23(away)
+        h_top11    = get_fc25_top11(home)
+        a_top11    = get_fc25_top11(away)
+
         features.append({
             # FIFA 랭킹 관련
             'fpoints_diff':      h_fpoints - a_fpoints,
@@ -269,7 +291,15 @@ def build_features(wc_df, df, ranking, continent_winrate):
             # 징크스
             'home_defending':    h_def,
             'away_defending':    a_def,
+
+            # FC25 선수 능력치 (NEW!)
+            'fc25_strength_diff': h_fc25 - a_fc25,
+            'home_fc25_strength': h_fc25,
+            'away_fc25_strength': a_fc25,
+            'top23_diff':         h_top23 - a_top23,
+            'top11_diff':         h_top11 - a_top11,
         })
+        
 
         if idx % 100 == 0:
             print(f"  진행중... {idx}/{len(wc_df)}")
@@ -293,20 +323,23 @@ def build_team_cache(df, ranking, wc_df):
         h_wr, h_dr, h_gf, h_ga, h_pts = get_team_stats(team, date, df)
         cont = get_continent(team)
         team_cache[team] = {
-            'wr':      h_wr,
-            'dr':      h_dr,
-            'gf':      h_gf,
-            'ga':      h_ga,
-            'pts':     h_pts,
-            'form':    get_recent_form(team, date, df),
-            'rank':    get_fifa_rank(team, date, ranking),
-            'fpoints': get_fifa_points(team, date, ranking),
-            'exp':     get_worldcup_experience(team, date, wc_df),
-            'cont':    cont,
-            'penalty': get_host_continent_penalty(cont, date),
-            # 2026 개최국 여부
+            'wr':           h_wr,
+            'dr':           h_dr,
+            'gf':           h_gf,
+            'ga':           h_ga,
+            'pts':          h_pts,
+            'form':         get_recent_form(team, date, df),
+            'rank':         get_fifa_rank(team, date, ranking),
+            'fpoints':      get_fifa_points(team, date, ranking),
+            'exp':          get_worldcup_experience(team, date, wc_df),
+            'cont':         cont,
+            'penalty':      get_host_continent_penalty(cont, date),
             'is_host_2026': 1 if HOST_MAP.get(team, 0) == 2026 else 0,
-        }
+            # FC25 추가
+            'fc25_strength': get_fc25_strength(team),
+            'fc25_top23':    get_fc25_top23(team),
+            'fc25_top11':    get_fc25_top11(team),
+        } 
         print(f"  {team:<30} 랭킹: {team_cache[team]['rank']}위  폼: {team_cache[team]['form']:.2f}")
 
     print("✅ 팀 캐싱 완료!")

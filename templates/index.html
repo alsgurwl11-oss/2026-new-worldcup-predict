@@ -78,6 +78,7 @@
         <button class="tab" onclick="showTab('tournament', this)">🏆 우승 예측</button>
         <button class="tab" onclick="showTab('bracket', this)">🗓️ 토너먼트 브라켓</button>
         <button class="tab" onclick="showTab('korea', this)">🇰🇷 한국 시나리오</button>
+        <button class="tab" onclick="showTab('upset', this)">⚡ 이변 경보</button>
     </div>
 
     <!-- ① 경기 예측 -->
@@ -156,14 +157,67 @@
     <!-- ② 조별리그 -->
     <div id="tab-group" class="tab-content">
         <h2 style="margin-bottom:15px;">📊 조별리그 시뮬레이션</h2>
-        <div class="group-selector">
-            {% for group in groups.keys() %}
-            <button class="group-btn" onclick="simulateGroup('{{ group }}', this)">{{ group }}조</button>
-            {% endfor %}
-        </div>
+    <div class="group-selector">
+    {% for group in groups.keys() %}
+    <button class="group-btn" onclick="simulateGroup('{{ group }}', this)">{{ group }}조 순위</button>
+    <button class="group-btn" onclick="loadGroupMatches('{{ group }}', this)">{{ group }}조 경기</button>
+    {% endfor %}
+    </div>
         <div class="group-result" id="group-result">
             <p style="color:#aaa; text-align:center; padding:30px;">조를 선택하면 시뮬레이션 결과가 나와요 😊</p>
         </div>
+        async function loadGroupMatches(group, btn) {
+    document.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    document.getElementById('group-result').innerHTML = `
+        <div class="loading"><div class="spinner"></div><p>${group}조 경기 예측 중...</p></div>`;
+
+    const res  = await fetch('/api/group_matches', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({group})
+    });
+    const data = await res.json();
+
+    let html = `<h3 style="margin-bottom:15px;">${group}조 경기별 예측</h3>`;
+
+    data.matches.forEach((match, idx) => {
+        const homeClass = match.home_win >= match.away_win ? 'prob-high' : 'prob-low';
+        const awayClass = match.away_win > match.home_win  ? 'prob-high' : 'prob-low';
+        html += `
+            <div style="background:#0d0d2e; border-radius:12px; padding:20px; margin-bottom:15px; border:1px solid #333;">
+                <div style="text-align:center; margin-bottom:15px; color:#aaa; font-size:0.85em;">경기 ${idx+1}</div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px;">
+                    <div style="text-align:center; flex:1;">
+                        <div style="font-weight:bold; font-size:1.1em;">${match.home}</div>
+                        <div style="color:#aaa; font-size:0.8em;">FIFA ${match.home_rank}위</div>
+                    </div>
+                    <div style="font-size:1.3em; font-weight:bold; color:#4a4aff; padding:0 15px;">VS</div>
+                    <div style="text-align:center; flex:1;">
+                        <div style="font-weight:bold; font-size:1.1em;">${match.away}</div>
+                        <div style="color:#aaa; font-size:0.8em;">FIFA ${match.away_rank}위</div>
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center;">
+                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
+                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">홈팀 승</div>
+                        <div class="${homeClass}" style="font-size:1.3em;">${match.home_win}%</div>
+                    </div>
+                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
+                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">무승부</div>
+                        <div style="font-size:1.3em; color:#ffbb44; font-weight:bold;">${match.draw}%</div>
+                    </div>
+                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
+                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">원정팀 승</div>
+                        <div class="${awayClass}" style="font-size:1.3em;">${match.away_win}%</div>
+                    </div>
+                </div>
+            </div>`;
+    });
+
+    document.getElementById('group-result').innerHTML = html;
+}
     </div>
 
     <!-- ③ 32강 확률 -->
@@ -209,6 +263,22 @@
             <p style="color:#aaa; text-align:center; padding:30px;">버튼을 눌러 한국의 라운드별 확률과 예상 상대를 확인하세요</p>
         </div>
     </div>
+
+    <!-- ⑦ 이변 경보 탭 -->
+    <div id="tab-upset" class="tab-content">
+         <h2 style="margin-bottom:15px;">⚡ 이변 경보 분석</h2>
+        <p style="color:#aaa; margin-bottom:20px; font-size:0.9em;">
+        데이터 기반 이변 취약성 지수(UVI) - xG 차이, 전술 상성, 슈팅 효율, 라운드 기저율 분석
+        </p>
+     <button class="btn-primary" onclick="loadUpsetAnalysis()" style="margin-bottom:20px;">
+        🔄 이변 경보 분석 실행
+        </button>
+         <div id="upset-result">
+        <p style="color:#aaa; text-align:center; padding:30px;">
+            버튼을 눌러 이변 가능성 높은 경기를 확인하세요
+        </p>
+    </div>
+</div>
 
 </div>
 
@@ -482,6 +552,163 @@ async function loadKoreaScenario() {
 
     html += '</tbody></table></div>';
     document.getElementById('korea-result').innerHTML = html;
+}
+async function loadGroupMatches(group, btn) {
+    document.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    document.getElementById('group-result').innerHTML = `
+        <div class="loading"><div class="spinner"></div><p>${group}조 경기 예측 중...</p></div>`;
+
+    const res  = await fetch('/api/group_matches', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({group})
+    });
+    const data = await res.json();
+
+    let html = `<h3 style="margin-bottom:15px;">${group}조 경기별 예측</h3>`;
+
+    data.matches.forEach((match, idx) => {
+        const homeClass = match.home_win >= match.away_win ? 'prob-high' : 'prob-low';
+        const awayClass = match.away_win > match.home_win  ? 'prob-high' : 'prob-low';
+        html += `
+            <div style="background:#0d0d2e; border-radius:12px; padding:20px; margin-bottom:15px; border:1px solid #333;">
+                <div style="text-align:center; margin-bottom:15px; color:#aaa; font-size:0.85em;">경기 ${idx+1}</div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px;">
+                    <div style="text-align:center; flex:1;">
+                        <div style="font-weight:bold; font-size:1.1em;">${match.home}</div>
+                        <div style="color:#aaa; font-size:0.8em;">FIFA ${match.home_rank}위</div>
+                    </div>
+                    <div style="font-size:1.3em; font-weight:bold; color:#4a4aff; padding:0 15px;">VS</div>
+                    <div style="text-align:center; flex:1;">
+                        <div style="font-weight:bold; font-size:1.1em;">${match.away}</div>
+                        <div style="color:#aaa; font-size:0.8em;">FIFA ${match.away_rank}위</div>
+                    </div>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center;">
+                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
+                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">홈팀 승</div>
+                        <div class="${homeClass}" style="font-size:1.3em;">${match.home_win}%</div>
+                    </div>
+                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
+                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">무승부</div>
+                        <div style="font-size:1.3em; color:#ffbb44; font-weight:bold;">${match.draw}%</div>
+                    </div>
+                    <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
+                        <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">원정팀 승</div>
+                        <div class="${awayClass}" style="font-size:1.3em;">${match.away_win}%</div>
+                    </div>
+                </div>
+            </div>`;
+    });
+
+    document.getElementById('group-result').innerHTML = html;
+}
+// ⑦ 이변 경보 분석
+async function loadUpsetAnalysis() {
+    document.getElementById('upset-result').innerHTML = `
+        <div class="loading"><div class="spinner"></div><p>이변 경보 분석 중...</p></div>`;
+
+    const res  = await fetch('/api/upset_analysis');
+    const data = await res.json();
+
+    let html = `
+        <div style="margin-bottom:20px; padding:15px; background:#1a1a2e; border-radius:10px;">
+            <h3 style="margin-bottom:10px;">📊 이변 지수(UVI) 설명</h3>
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:10px; font-size:0.85em;">
+                <div style="background:#0d2d0d; padding:10px; border-radius:8px; text-align:center;">
+                    <div style="color:#00ff88; font-weight:bold;">✅ 신뢰도 높음</div>
+                    <div style="color:#aaa;">UVI 0~20%</div>
+                </div>
+                <div style="background:#2d2d0d; padding:10px; border-radius:8px; text-align:center;">
+                    <div style="color:#ffbb44; font-weight:bold;">🟡 이변 가능</div>
+                    <div style="color:#aaa;">UVI 20~35%</div>
+                </div>
+                <div style="background:#2d0d0d; padding:10px; border-radius:8px; text-align:center;">
+                    <div style="color:#ff7777; font-weight:bold;">🔴 이변 주의</div>
+                    <div style="color:#aaa;">UVI 35~50%</div>
+                </div>
+                <div style="background:#1a0000; padding:10px; border-radius:8px; text-align:center;">
+                    <div style="color:#ff0000; font-weight:bold;">⚡ 이변 경보</div>
+                    <div style="color:#aaa;">UVI 50%+</div>
+                </div>
+            </div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>조</th>
+                    <th>경기</th>
+                    <th>예측 우세팀</th>
+                    <th>예측 열세팀</th>
+                    <th>강팀 승률</th>
+                    <th>⚡ 이변 지수</th>
+                    <th>신뢰도</th>
+                    <th>주요 요인</th>
+                </tr>
+            </thead>
+            <tbody>`;
+
+    data.forEach((match, idx) => {
+        const conf    = match.confidence;
+        const factors = match.factors;
+
+        // 주요 이변 요인 찾기
+        const factorNames = {
+            'xg_gap':      'xG 박빙',
+            'shooting':    '슈팅 효율',
+            'tactical':    '전술 상성',
+            'round':       '라운드 특성',
+            'desperation': '절박도',
+            'key_man':     '원맨팀',
+        };
+
+        const topFactor = Object.entries(factors)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 2)
+            .map(([k, v]) => `${factorNames[k]} (${(v*100).toFixed(0)}%)`)
+            .join(', ');
+
+        html += `
+            <tr>
+                <td class="rank-num">${idx + 1}</td>
+                <td style="color:#aaa">${match.group}조</td>
+                <td style="font-size:0.85em">${match.home} vs ${match.away}</td>
+                <td>
+                    <strong>${match.favorite}</strong>
+                    <div style="color:#aaa; font-size:0.8em">FIFA ${match.fav_rank}위</div>
+                </td>
+                <td>
+                    <strong>${match.underdog}</strong>
+                    <div style="color:#aaa; font-size:0.8em">FIFA ${match.und_rank}위</div>
+                </td>
+                <td>
+                    <span class="${match.fav_win >= 60 ? 'prob-high' : match.fav_win >= 45 ? 'prob-mid' : 'prob-low'}">
+                        ${match.fav_win}%
+                    </span>
+                </td>
+                <td>
+                    <strong style="color:${conf.color}; font-size:1.1em">
+                        ${(match.uvi * 100).toFixed(1)}%
+                    </strong>
+                    <div class="qualify-bar" style="margin-top:4px;">
+                        <div class="qualify-fill" style="width:${match.uvi*100}%; background:${conf.color}"></div>
+                    </div>
+                </td>
+                <td>
+                    <span style="color:${conf.color}; font-weight:bold; font-size:0.85em">
+                        ${conf.label}
+                    </span>
+                </td>
+                <td style="font-size:0.8em; color:#aaa">${topFactor}</td>
+            </tr>`;
+    });
+
+    html += '</tbody></table>';
+    document.getElementById('upset-result').innerHTML = html;
 }
 </script>
 </body>

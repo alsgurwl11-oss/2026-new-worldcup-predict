@@ -12,6 +12,11 @@ from simulate import (
     simulate_tournament, simulate_bracket,
     simulate_korea_scenario
 )
+from upset_model import (
+    calculate_uvi,
+    calculate_all_group_uvi,
+    get_confidence_level
+)
 from config import GROUPS_2026
 
 app = Flask(__name__)
@@ -181,6 +186,52 @@ def team_scenario():
 
     result = simulate_korea_scenario(target_team=team, **pred_args())
     return jsonify(result)
+# ================================
+# API - 이변 분석
+# ================================
+@app.route('/api/upset_analysis', methods=['GET'])
+def upset_analysis():
+    """전체 경기 이변 가능성 분석"""
+    result = calculate_all_group_uvi(**pred_args())
+    return jsonify(result)
+
+@app.route('/api/match_uvi', methods=['POST'])
+def match_uvi():
+    """특정 경기 UVI 계산"""
+    data     = request.json
+    home     = data.get('home')
+    away     = data.get('away')
+    round_n  = data.get('round', 'Group stage')
+    fav_pts  = data.get('favorite_pts', 0)
+    und_pts  = data.get('underdog_pts', 0)
+
+    if not home or not away:
+        return jsonify({'error': '팀을 선택해주세요'}), 400
+
+    home_tc  = team_cache.get(home, {})
+    away_tc  = team_cache.get(away, {})
+    home_str = home_tc.get('fpoints', 500)
+    away_str = away_tc.get('fpoints', 500)
+
+    favorite = home if home_str >= away_str else away
+    underdog = away if home_str >= away_str else home
+
+    result = calculate_uvi(
+        favorite     = favorite,
+        underdog     = underdog,
+        team_cache   = team_cache,
+        round_name   = round_n,
+        favorite_pts = fav_pts,
+        underdog_pts = und_pts,
+    )
+
+    return jsonify({
+        'home':     home,
+        'away':     away,
+        'favorite': favorite,
+        'underdog': underdog,
+        **result
+    })
 
 if __name__ == '__main__':
     print("\n🚀 Flask 서버 시작!")

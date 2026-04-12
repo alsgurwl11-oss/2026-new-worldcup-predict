@@ -14,7 +14,7 @@ from config import (
     XGB_PARAMS, DATA_FILES, PREDICT_DATE,
     TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED,TEAM_OVERALL_STRENGTH,
     TEAM_INJURY_INDEX,
-    TEAM_FORM_INDEX,
+    TEAM_FORM_INDEX,FIFA_RANKING_2026,
 )
 
 # ================================
@@ -32,6 +32,8 @@ def load_match_data():
     df = df.dropna(subset=['home_score', 'away_score'])
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values('date').reset_index(drop=True)
+
+    df=df[df['date'] >= '1992-01-01'].copy().reset_index(drop=True)
     df['result'] = df.apply(_get_result, axis=1)
     print(f"✅ 경기 데이터 로딩 완료: {len(df):,}경기")
     return df
@@ -80,9 +82,12 @@ def get_fc25_top11(team):
     return TEAM_STRENGTH_FC25.get(team, {}).get('top11', 68.0)
 
 def get_fifa_rank(team, date, ranking):
-    """특정 날짜 기준 FIFA 랭킹 반환"""
+    # 2026년 예측할 때만 하드코딩 적용
+    if date.year >= 2025 and team in FIFA_RANKING_2026:
+        return FIFA_RANKING_2026[team]
+    # 과거 경기는 CSV 방식
     mapped = NAME_MAP.get(team, team)
-    past   = ranking[
+    past = ranking[
         (ranking['country_full'] == mapped) &
         (ranking['rank_date'] <= date)
     ]
@@ -90,11 +95,17 @@ def get_fifa_rank(team, date, ranking):
 
 def get_fifa_points(team, date, ranking):
     """특정 날짜 기준 FIFA 포인트 반환"""
+    # 2025년 이전은 CSV 방식
+    if date.year < 2025:
+        mapped = NAME_MAP.get(team, team)
+        past = ranking[
+            (ranking['country_full'] == mapped) &
+            (ranking['rank_date'] <= date)
+        ]
+        return float(past.iloc[-1]['total_points']) if len(past) > 0 else 500
+    # 2025년 이후는 CSV 최신값 사용
     mapped = NAME_MAP.get(team, team)
-    past   = ranking[
-        (ranking['country_full'] == mapped) &
-        (ranking['rank_date'] <= date)
-    ]
+    past = ranking[ranking['country_full'] == mapped]
     return float(past.iloc[-1]['total_points']) if len(past) > 0 else 500
 
 def get_team_stats(team, date, df, n=10):
@@ -438,7 +449,21 @@ def initialize():
     # 데이터 로딩은 항상 필요
     df      = load_match_data()
     ranking = load_ranking_data()
-    wc_df   = df[df['tournament'] == 'FIFA World Cup'].copy().reset_index(drop=True)
+
+# 수정 후
+    HIGH_QUALITY = [
+    'FIFA World Cup',
+    'FIFA World Cup qualification',
+    'UEFA Euro',
+    'UEFA Euro qualification',
+    'Copa América',
+    'African Cup of Nations',
+    'AFC Asian Cup',
+    'UEFA Nations League',
+    'CONCACAF Nations League',
+    'Gold Cup',
+    ]
+    wc_df = df[df['tournament'].isin(HIGH_QUALITY)].copy().reset_index(drop=True)
     print(f"✅ 월드컵 경기: {len(wc_df)}경기")
 
     if model_exists():

@@ -102,6 +102,7 @@ PREV_CHAMPIONS = {
     1990: 'Argentina', 1994: 'Germany',   1998: 'Brazil',
     2002: 'France',    2006: 'Brazil',    2010: 'Italy',
     2014: 'Spain',     2018: 'Germany',   2022: 'France',
+    2026: 'Argentina',       # 2022 우승국
 }
 
 # --------------------------------
@@ -269,7 +270,7 @@ DATA_FILES = {
 # --------------------------------
 # 예측 기준 날짜
 # --------------------------------
-PREDICT_DATE = '2024-06-20'
+PREDICT_DATE = '2026-06-01'
 
 # --------------------------------
 # FC25 선수 능력치 기반 팀 전력
@@ -407,4 +408,57 @@ TEAM_OVERALL_STRENGTH = {
     'Iraq': 0.2654, 'Panama': 0.2584, 'Haiti': 0.2512,
     'Tunisia': 0.2472, 'New Zealand': 0.2404, 'Cape Verde': 0.232,
     'South Africa': 0.2137, 'Saudi Arabia': 0.1971, 'Qatar': 0.1728,
+}
+# --------------------------------
+# 2026년 4월 FIFA 랭킹 (하드코딩)
+# 출처: FIFA 공홈 2026.04.01 기준
+# --------------------------------
+FIFA_RANKING_2026 = {
+    'France':                  1,
+    'Spain':                   2,
+    'Argentina':               3,
+    'England':                 4,
+    'Portugal':                5,
+    'Brazil':                  6,
+    'Netherlands':             7,
+    'Morocco':                 8,
+    'Belgium':                 9,
+    'Germany':                10,
+    'Croatia':                11,
+    'Uruguay':                13,
+    'Senegal':                14,
+    'Mexico':                 15,
+    'United States':          16,
+    'Colombia':               17,
+    'Japan':                  18,
+    'Switzerland':            19,
+    'South Korea':            25,
+    'Australia':              27,
+    'Canada':                 30,
+    'Ecuador':                32,
+    'Norway':                 34,
+    'Turkey':                 38,
+    'Austria':                39,
+    'Scotland':               43,
+    'Egypt':                  29,
+    'Algeria':                42,
+    'Iran':                   48,
+    'Saudi Arabia':           56,
+    'Ghana':                  60,
+    'Czech Republic':         37,
+    'Paraguay':               62,
+    'Tunisia':                45,
+    'Ivory Coast':            41,
+    'South Africa':           66,
+    'Panama':                 72,
+    'Qatar':                  78,
+    'Bosnia and Herzegovina': 65,
+    'New Zealand':            95,
+    'Iraq':                   57,
+    'Jordan':                 88,
+    'Uzbekistan':             74,
+    'Curacao':               130,
+    'Cape Verde':             80,
+    'Haiti':                 115,
+    'Sweden':                 24,
 }

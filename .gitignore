@@ -4,3 +4,6 @@ data/player_market_value.csv
 data/player_injuries.csv 
 data/player_national_performances.csv 
 data/team_competitions_seasons.csv 
+__pycache__/ 
+*.pyc 
+model.pkl 

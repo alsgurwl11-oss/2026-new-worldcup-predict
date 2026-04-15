@@ -7,6 +7,9 @@
 ![XGBoost](https://img.shields.io/badge/XGBoost-2.0-orange)
 
 ---
+## 🌐 라이브 데모
+
+👉 [2026 월드컵 예측기 바로가기](https://2026-new-worldcup-predict-production.up.railway.app)
 
 ## 📌 프로젝트 개요
 

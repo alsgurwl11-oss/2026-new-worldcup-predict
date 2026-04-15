@@ -7,3 +7,4 @@ data/team_competitions_seasons.csv
 __pycache__/ 
 *.pyc 
 model.pkl 
+model.pkl 

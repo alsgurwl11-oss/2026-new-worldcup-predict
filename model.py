@@ -311,15 +311,7 @@ def build_features(wc_df, df, ranking, continent_winrate):
             'top23_diff':         h_top23 - a_top23,
             'top11_diff':         h_top11 - a_top11,
 
-            # Transfermarkt 데이터 기반 피처
-            'home_overall_strength': TEAM_OVERALL_STRENGTH.get(home, 0.35),
-            'away_overall_strength': TEAM_OVERALL_STRENGTH.get(away, 0.35),
-            'overall_strength_diff': TEAM_OVERALL_STRENGTH.get(home, 0.35) - TEAM_OVERALL_STRENGTH.get(away, 0.35),
-            'home_injury_index':     TEAM_INJURY_INDEX.get(home, 0.3),
-            'away_injury_index':     TEAM_INJURY_INDEX.get(away, 0.3),
-            'home_form_index':       TEAM_FORM_INDEX.get(home, 0.4),
-            'away_form_index':       TEAM_FORM_INDEX.get(away, 0.4),
-            'form_index_diff':       TEAM_FORM_INDEX.get(home, 0.4) - TEAM_FORM_INDEX.get(away, 0.4),
+          
         })
         
 

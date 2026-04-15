@@ -10,6 +10,11 @@
 ## 🌐 라이브 데모
 
 👉 [2026 월드컵 예측기 바로가기](https://2026-new-worldcup-predict-production.up.railway.app)
+## 🌐 라이브 데모
+
+👉 [2026 월드컵 예측기](https://two026-worldcup-predict.onrender.com)
+
+> ⚠️ 첫 접속 시 30초~1분 로딩 (무료 서버 슬립 모드)
 
 ## 📌 프로젝트 개요
 

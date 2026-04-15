@@ -260,11 +260,11 @@ XGB_PARAMS = {
 # 데이터 파일 경로
 # --------------------------------
 DATA_FILES = {
-    'results':    'results.csv',
-    'ranking_1':  'fifa_ranking-2023-07-20.csv',
-    'ranking_2':  'fifa_ranking-2024-04-04.csv',
-    'ranking_3':  'fifa_ranking-2024-06-20.csv',
-    'model':      'model.pkl',
+    'results':   'data/results.csv',
+    'ranking_1': 'data/fifa_ranking-2023-07-20.csv',
+    'ranking_2': 'data/fifa_ranking-2024-04-04.csv',
+    'ranking_3': 'data/fifa_ranking-2024-06-20.csv',
+    'model':     'model.pkl',
 }
 
 # --------------------------------

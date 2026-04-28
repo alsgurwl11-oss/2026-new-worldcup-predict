@@ -16,7 +16,7 @@ GROUPS_2026 = {
     'H': ['Spain', 'Cape Verde', 'Saudi Arabia', 'Uruguay'],
     'I': ['France', 'Senegal', 'Norway', 'Iraq'],
     'J': ['Argentina', 'Algeria', 'Austria', 'Jordan'],
-    'K': ['Portugal', 'Uzbekistan', 'Colombia', 'Iraq'],
+    'K': ['Portugal', 'Uzbekistan', 'Colombia', 'DR Congo'],
     'L': ['England', 'Croatia', 'Ghana', 'Panama'],
 }
 
@@ -35,6 +35,7 @@ NAME_MAP = {
     'Bosnia and Herzegovina': 'Bosnia-Herzegovina',
     'Cape Verde':             'Cape Verde',
     'Trinidad and Tobago':    'Trinidad and Tobago',
+    'DR Congo':               'Congo DR',
 }
 
 # --------------------------------
@@ -64,13 +65,13 @@ CONTINENT_MAP = {
     'Mexico': 'CONCACAF', 'United States': 'CONCACAF', 'Canada': 'CONCACAF',
     'Costa Rica': 'CONCACAF', 'Honduras': 'CONCACAF', 'Jamaica': 'CONCACAF',
     'Panama': 'CONCACAF', 'Trinidad and Tobago': 'CONCACAF',
-    'Curacao': 'CONCACAF', 'Haiti': 'CONCACAF',
+    'Curacao': 'CONCACAF', 'Haiti': 'CONCACAF', 
     # CAF
     'Cameroon': 'CAF', 'Nigeria': 'CAF', 'Ghana': 'CAF',
     'Senegal': 'CAF', 'Morocco': 'CAF', 'Egypt': 'CAF',
     'Ivory Coast': 'CAF', 'Algeria': 'CAF', 'Tunisia': 'CAF',
     'South Africa': 'CAF', 'Angola': 'CAF', 'Togo': 'CAF',
-    'Cape Verde': 'CAF',
+    'Cape Verde': 'CAF', 'DR Congo': 'CAF',
     # OFC
     'New Zealand': 'OFC',
 }
@@ -163,6 +164,7 @@ OPTA_WIN_PROB = {
     'Cape Verde':             0.0001,
     'Bosnia and Herzegovina': 0.0001,
     'Iraq':                   0.0001,
+    'DR Congo':               0.0001,
 }
 
 # --------------------------------
@@ -217,6 +219,7 @@ BETTING_ODDS = {
     'Curacao':                1000000,
     'Cape Verde':             500000,
     'Bosnia and Herzegovina': 200000,
+    'DR Congo':               300000,
 }
 
 # --------------------------------
@@ -461,4 +464,135 @@ FIFA_RANKING_2026 = {
     'Cape Verde':             80,
     'Haiti':                 115,
     'Sweden':                 24,
+    'DR Congo':               46,  
+}
+# ================================
+# config.py 맨 아래에 추가할 내용
+# ================================
+
+# ================================
+# 브라켓 대진표 설정
+# ================================
+
+# 라운드별 강팀 어드밴티지 보정
+# 토너먼트 후반으로 갈수록 강팀이 유리해지는 현실 반영
+# 근거: 샘플 부족(8강 8경기)으로 이론 기반 설계
+ROUND_MULTIPLIER = {
+    'Round of 32': 1.00,  # 보정 없음
+    'Round of 16': 1.10,  # 강팀 10% 어드밴티지
+    'Quarter':     1.15,  # 강팀 15% 어드밴티지
+    'Semi':        1.20,  # 강팀 20% 어드밴티지
+    'Final':       1.25,  # 강팀 25% 어드밴티지
+    'Third':       1.15,  # 3위전 별도 보정
+}
+
+# 2026 FIFA 공식 32강 대진표
+# ('조', '순위') 또는 ('3rd', '후보조군') 형태
+BRACKET_2026 = {
+    'R32_1':  {'home': ('A', '2'), 'away': ('B', '2'),       'venue': '로스앤젤레스',    'date': '06.29'},
+    'R32_2':  {'home': ('E', '1'), 'away': ('3rd', 'ABCDF'), 'venue': '보스턴',          'date': '06.30'},
+    'R32_3':  {'home': ('F', '1'), 'away': ('C', '2'),       'venue': '몬테레이',        'date': '06.30'},
+    'R32_4':  {'home': ('C', '1'), 'away': ('F', '2'),       'venue': '휴스턴',          'date': '06.30'},
+    'R32_5':  {'home': ('I', '1'), 'away': ('3rd', 'CDFGH'), 'venue': '뉴욕',            'date': '07.01'},
+    'R32_6':  {'home': ('E', '2'), 'away': ('I', '2'),       'venue': '댈러스',          'date': '07.01'},
+    'R32_7':  {'home': ('A', '1'), 'away': ('3rd', 'CEFHI'), 'venue': '아스테카',        'date': '07.01'},
+    'R32_8':  {'home': ('L', '1'), 'away': ('3rd', 'EHIJK'), 'venue': '애틀랜타',        'date': '07.02'},
+    'R32_9':  {'home': ('D', '1'), 'away': ('3rd', 'BEFIJ'), 'venue': '샌프란시스코',    'date': '07.02'},
+    'R32_10': {'home': ('G', '1'), 'away': ('3rd', 'AEHIJ'), 'venue': '시애틀',          'date': '07.02'},
+    'R32_11': {'home': ('K', '2'), 'away': ('L', '2'),       'venue': '토론토',          'date': '07.03'},
+    'R32_12': {'home': ('H', '1'), 'away': ('J', '2'),       'venue': '로스앤젤레스',    'date': '07.03'},
+    'R32_13': {'home': ('B', '1'), 'away': ('3rd', 'EFGIJ'), 'venue': '밴쿠버',          'date': '07.03'},
+    'R32_14': {'home': ('J', '1'), 'away': ('H', '2'),       'venue': '마이애미',        'date': '07.04'},
+    'R32_15': {'home': ('K', '1'), 'away': ('3rd', 'DEIJL'), 'venue': '캔자스시티',      'date': '07.04'},
+    'R32_16': {'home': ('D', '2'), 'away': ('G', '2'),       'venue': '댈러스',          'date': '07.04'},
+}
+
+BRACKET_R16 = {
+    'R16_1': {'home': 'R32_1',  'away': 'R32_2',  'venue': '필라델피아', 'date': '07.05'},
+    'R16_2': {'home': 'R32_7',  'away': 'R32_6',  'venue': '휴스턴',     'date': '07.05'},
+    'R16_3': {'home': 'R32_3',  'away': 'R32_4',  'venue': '뉴욕',       'date': '07.06'},
+    'R16_4': {'home': 'R32_5',  'away': 'R32_8',  'venue': '아스테카',   'date': '07.06'},
+    'R16_5': {'home': 'R32_9',  'away': 'R32_10', 'venue': '댈러스',     'date': '07.07'},
+    'R16_6': {'home': 'R32_11', 'away': 'R32_12', 'venue': '시애틀',     'date': '07.07'},
+    'R16_7': {'home': 'R32_13', 'away': 'R32_14', 'venue': '애틀랜타',   'date': '07.08'},
+    'R16_8': {'home': 'R32_15', 'away': 'R32_16', 'venue': '밴쿠버',     'date': '07.08'},
+}
+
+BRACKET_QF = {
+    'QF_1': {'home': 'R16_1', 'away': 'R16_2', 'venue': '보스턴',     'date': '07.10'},
+    'QF_2': {'home': 'R16_3', 'away': 'R16_4', 'venue': 'LA',         'date': '07.11'},
+    'QF_3': {'home': 'R16_5', 'away': 'R16_6', 'venue': '마이애미',   'date': '07.12'},
+    'QF_4': {'home': 'R16_7', 'away': 'R16_8', 'venue': '캔자스시티', 'date': '07.12'},
+}
+
+BRACKET_SF = {
+    'SF_1': {'home': 'QF_1', 'away': 'QF_2', 'venue': '댈러스',   'date': '07.15'},
+    'SF_2': {'home': 'QF_3', 'away': 'QF_4', 'venue': '애틀랜타', 'date': '07.16'},
+}
+
+# ================================
+# 포아송 스코어라인 설정
+# ================================
+
+# 기본 득점 기대값 (데이터 없는 팀 폴백)
+DEFAULT_XG = {
+    'strong': 1.8,  # FIFA 랭킹 1~15위
+    'mid':    1.3,  # FIFA 랭킹 16~40위
+    'weak':   0.8,  # FIFA 랭킹 41위 이하
+}
+
+# 홈/중립/어웨이 보정 계수
+VENUE_XG_MODIFIER = {
+    'home':    1.15,
+    'neutral': 1.00,
+    'away':    0.85,
+}
+
+# 라운드별 수비 강화 계수 (토너먼트 후반 저득점 경향)
+ROUND_DEFENSIVE_FACTOR = {
+    'Group':       1.00,
+    'Round of 32': 0.95,
+    'Round of 16': 0.90,
+    'Quarter':     0.85,
+    'Semi':        0.80,
+    'Final':       0.78,
+}
+
+# 스코어라인 최대 골 수
+MAX_GOALS = 5
+
+# ================================
+# 백테스트 설정
+# ================================
+
+BACKTEST_TOURNAMENTS = {
+    '2022': {
+        'name':       '2022 카타르 월드컵',
+        'start_date': '2022-11-20',
+        'end_date':   '2022-12-18',
+        'champion':   'Argentina',
+        'runner_up':  'France',
+        'third':      'Croatia',
+        'fourth':     'Morocco',
+    },
+    '2018': {
+        'name':       '2018 러시아 월드컵',
+        'start_date': '2018-06-14',
+        'end_date':   '2018-07-15',
+        'champion':   'France',
+        'runner_up':  'Croatia',
+        'third':      'Belgium',
+        'fourth':     'England',
+    },
+}
+
+# ================================
+# 죽음의 조 GDI 가중치
+# (각 지표 0~100 정규화 후 합산)
+# ================================
+GDI_WEIGHTS = {
+    'avg_strength':  0.35,  # 평균 FIFA 포인트 (정규화)
+    'min_strength':  0.35,  # 최약체 강도 (정규화)
+    'balance':       0.15,  # 팀 간 균형도 (낮은 편차 = 균등)
+    'avg_form':      0.15,  # 평균 최근 폼
 }

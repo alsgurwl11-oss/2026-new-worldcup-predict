@@ -2,6 +2,12 @@
 # app.py - Flask 라우트만 담당
 # ================================
 
+import time
+import pandas as pd
+from predict import predict_scoreline
+from simulate import simulate_full_bracket, simulate_what_if
+from backtest import run_backtest, run_all_backtests
+from analysis_advanced import calculate_all_groups_difficulty
 from flask import Flask, render_template, request, jsonify
 from model import initialize
 from predict import (
@@ -232,10 +238,147 @@ def match_uvi():
         'underdog': underdog,
         **result
     })
+# ================================
+# app.py에 추가할 내용
+# ================================
+# 1. 파일 상단 import에 추가:
+#
+# from predict import predict_scoreline
+# from simulate import simulate_full_bracket, simulate_what_if
+# from backtest import run_backtest, run_all_backtests
+# from analysis_advanced import calculate_all_groups_difficulty
+#
+# 2. 아래 라우트들을 if __name__ == '__main__': 바로 위에 추가
+# ================================
 
+
+# ================================
+# API - 포아송 스코어라인
+# ================================
+@app.route('/api/scoreline', methods=['POST'])
+def scoreline():
+    """
+    포아송 분포 기반 예상 스코어라인
+    Request: {home, away, round}
+    Response: top5 스코어, xG, BTTS, 오버언더
+    """
+    data       = request.json or {}
+    home       = data.get('home')
+    away       = data.get('away')
+    round_name = data.get('round', 'Group')
+
+    if not home or not away:
+        return jsonify({'error': '팀을 선택해주세요'}), 400
+    if home == away:
+        return jsonify({'error': '서로 다른 팀을 선택해주세요'}), 400
+
+    result = predict_scoreline(
+        home, away, team_cache,
+        venue='neutral', round_name=round_name
+    )
+    return jsonify(result)
+
+
+# ================================
+# API - 백테스트 시각화
+# ================================
+@app.route('/api/backtest', methods=['GET'])
+def backtest_all():
+    """전체 백테스트 결과 (2018 + 2022)"""
+    try:
+        hist    = pd.read_csv('data/wc_historical.csv')
+        results = run_all_backtests(
+            hist, team_cache, h2h_cache,
+            continent_winrate, model, top_features
+        )
+        return jsonify(results)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/backtest/<year>', methods=['GET'])
+def backtest_year(year):
+    """특정 연도 백테스트"""
+    from config import BACKTEST_TOURNAMENTS
+    if year not in BACKTEST_TOURNAMENTS:
+        return jsonify({'error': '지원하지 않는 대회 (2022 또는 2018)'}), 400
+    try:
+        hist   = pd.read_csv('data/wc_historical.csv')
+        result = run_backtest(
+            year, hist, team_cache, h2h_cache,
+            continent_winrate, model, top_features
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ================================
+# API - 죽음의 조 GDI
+# ================================
+@app.route('/api/group_difficulty', methods=['GET'])
+def group_difficulty():
+    """죽음의 조 난이도 랭킹"""
+    results = calculate_all_groups_difficulty(team_cache)
+    return jsonify(results)
+
+
+# ================================
+# API - What-if 시나리오
+# ================================
+@app.route('/api/what_if', methods=['POST'])
+def what_if():
+    """
+    What-if 시나리오 분석
+    Request: {group, fixed_results: [{home, away, result}]}
+    result 값: 'home_win' / 'draw' / 'away_win'
+    """
+    data          = request.json or {}
+    group_name    = data.get('group')
+    fixed_results = data.get('fixed_results', [])
+
+    from config import GROUPS_2026
+    if not group_name or group_name not in GROUPS_2026:
+        return jsonify({'error': '올바른 조를 선택해주세요'}), 400
+
+    valid = ['home_win', 'draw', 'away_win']
+    for fr in fixed_results:
+        if fr.get('result') not in valid:
+            return jsonify({'error': 'result는 home_win/draw/away_win'}), 400
+
+    result = simulate_what_if(
+        group_name, fixed_results, **pred_args()
+    )
+    return jsonify(result)
+
+
+# ================================
+# API - 예상 대진표 브라켓
+# ================================
+# ✅ 이렇게 기존 함수 안에 넣는 거야
+
+@app.route('/api/bracket_prediction', methods=['GET'])
+def bracket_prediction():
+    try:
+        t0 = time.time()          # ← 추가
+        
+        group_results = {}
+        for group in GROUPS_2026.keys():
+            result = simulate_group(group, **pred_args(), n_sim=300)
+            group_results[group] = result
+        
+        print(f"조별 시뮬 완료: {time.time()-t0:.1f}초")  # ← 추가
+        
+        output = simulate_full_bracket(group_results, **pred_args())
+        
+        print(f"브라켓 완료: {time.time()-t0:.1f}초")  # ← 추가
+        
+        return jsonify(output)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 if __name__ == '__main__':
     print("\n🚀 Flask 서버 시작!")
     print("http://127.0.0.1:5000 접속하세요\n")
     import os
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=True)

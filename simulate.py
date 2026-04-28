@@ -5,7 +5,12 @@
 import numpy as np
 from config import GROUPS_2026, SIM_CONFIG
 from predict import ensemble_predict, get_win_prob_pure
-
+from config import (
+    ROUND_MULTIPLIER,
+    BRACKET_2026, BRACKET_R16,
+    BRACKET_QF, BRACKET_SF,
+    GROUPS_2026,
+)
 # ================================
 # 1. 공통 유틸 함수
 # ================================
@@ -496,4 +501,436 @@ def simulate_korea_scenario(team_cache, h2h_cache,
             for o, c in ops_sorted
         ],
         'round_opponents': round_ops_sorted,
+    }
+
+    # ================================
+# simulate.py에 추가할 내용
+# ================================
+# 파일 상단 import에 추가:
+# from config import (
+#     ROUND_MULTIPLIER,
+#     BRACKET_2026, BRACKET_R16, BRACKET_QF, BRACKET_SF,
+# )
+# ================================
+
+import numpy as np
+from config import (
+    ROUND_MULTIPLIER,
+    BRACKET_2026, BRACKET_R16,
+    BRACKET_QF, BRACKET_SF,
+    GROUPS_2026,
+)
+
+
+# ================================
+# 브라켓 시뮬레이션 함수
+# ================================
+
+def apply_round_bonus(home_win, away_win, draw, round_name):
+    """
+    라운드별 강팀 어드밴티지 적용
+
+    - 토너먼트는 무승부 없음 → draw를 50/50 배분
+    - ROUND_MULTIPLIER로 강팀/약팀 차이 증폭
+    - 결과: 라운드 오를수록 강팀이 더 유리
+    """
+    multiplier = ROUND_MULTIPLIER.get(round_name, 1.0)
+
+    home_total = home_win + draw * 0.5
+    away_total = away_win + draw * 0.5
+    total      = home_total + away_total
+
+    if total == 0:
+        return 50.0, 50.0
+
+    home_prob = home_total / total
+    diff      = (home_prob - 0.5) * multiplier
+
+    home_final = min(max(0.5 + diff, 0.05), 0.95)
+    away_final = 1.0 - home_final
+
+    return round(home_final * 100, 1), round(away_final * 100, 1)
+
+
+def predict_bracket_match(team_a, team_b, round_name,
+                           team_cache, h2h_cache,
+                           continent_winrate, model, top_features):
+    """
+    브라켓 단일 경기 예측
+    - 기존 앙상블 동일 사용 (ML 20% + Opta 20% + 배당률 35% + ELO 25%)
+      이유: 배당률이 이미 토너먼트 전체 우승 확률 기반 → 토너먼트에도 적합
+    - 라운드 보정 추가 적용
+    """
+    from predict import ensemble_predict
+
+    result = ensemble_predict(
+        team_a, team_b,
+        team_cache, h2h_cache,
+        continent_winrate, model, top_features,
+        neutral=True
+    )
+
+    home_prob, away_prob = apply_round_bonus(
+        result['home_win'] / 100,
+        result['away_win'] / 100,
+        result['draw']    / 100,
+        round_name
+    )
+
+    winner = team_a if home_prob >= away_prob else team_b
+
+    return {
+        'home':      team_a,
+        'away':      team_b,
+        'home_prob': home_prob,
+        'away_prob': away_prob,
+        'winner':    winner,
+        'round':     round_name,
+    }
+
+
+def get_group_rankings(group_results):
+    """
+    simulate_group 반환값에서 1위/2위/3위 추출
+    반환값 구조:
+      group_results[group] = [
+          {'team':..., 'avg_points':..., 'qualify':..., ...}
+      ]
+    """
+    ranked = {}
+    for group, teams in group_results.items():
+        sorted_teams = sorted(
+            teams,
+            key=lambda x: (x['avg_points'], x['qualify']),
+            reverse=True
+        )
+        ranked[group] = {
+            '1':      sorted_teams[0]['team'],
+            '2':      sorted_teams[1]['team'],
+            '3':      sorted_teams[2]['team'],
+            '3_pts':  sorted_teams[2]['avg_points'],
+            '3_qual': sorted_teams[2]['qualify'],
+        }
+    return ranked
+
+
+def select_third_place_teams(ranked):
+    """
+    12개조 3위팀 중 성적 좋은 8팀 선발
+    선발 기준: avg_points → qualify 순
+    """
+    third_teams = sorted(
+        [
+            {
+                'group': group,
+                'team':  info['3'],
+                'pts':   info['3_pts'],
+                'qual':  info['3_qual'],
+            }
+            for group, info in ranked.items()
+        ],
+        key=lambda x: (x['pts'], x['qual']),
+        reverse=True
+    )[:8]
+
+    return {t['group']: t['team'] for t in third_teams}
+
+
+def simulate_full_bracket(group_results, team_cache, h2h_cache,
+                           continent_winrate, model, top_features):
+    """
+    전체 토너먼트 브라켓 예측
+
+    순서:
+    1. 조별 1위/2위/3위 추출
+    2. 3위팀 성적순 8팀 선발
+    3. 공식 대진표 기반 32강 배치
+    4. 32강 → 16강 → 8강 → 4강 → 결승
+    5. 각 경기 승자가 다음 라운드 진출
+
+    Returns:
+        bracket: 전체 경기 결과 딕셔너리
+        champion: 예상 우승팀
+        finalist: 예상 준우승팀
+    """
+    ranked     = get_group_rankings(group_results)
+    third_pool = select_third_place_teams(ranked)
+    bracket    = {}
+
+    def get_team(slot):
+        group, rank = slot
+        if rank in ('1', '2'):
+            return ranked[group][rank]
+        else:
+            candidates = list(rank)
+            for g in candidates:
+                if g in third_pool:
+                    return third_pool.pop(g)
+            return '미정'
+
+    # 32강 (16경기)
+    for mid, info in BRACKET_2026.items():
+        ta  = get_team(info['home'])
+        tb  = get_team(info['away'])
+        res = predict_bracket_match(
+            ta, tb, 'Round of 32',
+            team_cache, h2h_cache,
+            continent_winrate, model, top_features
+        )
+        res['venue'] = info['venue']
+        res['date']  = info['date']
+        bracket[mid] = res
+
+    # 16강 (8경기)
+    for mid, info in BRACKET_R16.items():
+        ta  = bracket[info['home']]['winner']
+        tb  = bracket[info['away']]['winner']
+        res = predict_bracket_match(
+            ta, tb, 'Round of 16',
+            team_cache, h2h_cache,
+            continent_winrate, model, top_features
+        )
+        res['venue'] = info['venue']
+        res['date']  = info['date']
+        bracket[mid] = res
+
+    # 8강 (4경기)
+    for mid, info in BRACKET_QF.items():
+        ta  = bracket[info['home']]['winner']
+        tb  = bracket[info['away']]['winner']
+        res = predict_bracket_match(
+            ta, tb, 'Quarter',
+            team_cache, h2h_cache,
+            continent_winrate, model, top_features
+        )
+        res['venue'] = info['venue']
+        res['date']  = info['date']
+        bracket[mid] = res
+
+    # 4강 (2경기)
+    for mid, info in BRACKET_SF.items():
+        ta  = bracket[info['home']]['winner']
+        tb  = bracket[info['away']]['winner']
+        res = predict_bracket_match(
+            ta, tb, 'Semi',
+            team_cache, h2h_cache,
+            continent_winrate, model, top_features
+        )
+        res['venue'] = info['venue']
+        res['date']  = info['date']
+        bracket[mid] = res
+
+    # 결승
+    ta  = bracket['SF_1']['winner']
+    tb  = bracket['SF_2']['winner']
+    res = predict_bracket_match(
+        ta, tb, 'Final',
+        team_cache, h2h_cache,
+        continent_winrate, model, top_features
+    )
+    res['venue'] = '뉴욕/뉴저지'
+    res['date']  = '07.20'
+    bracket['FINAL'] = res
+
+    # 3위전
+    loser_sf1 = (
+        bracket['SF_1']['away']
+        if bracket['SF_1']['winner'] == bracket['SF_1']['home']
+        else bracket['SF_1']['home']
+    )
+    loser_sf2 = (
+        bracket['SF_2']['away']
+        if bracket['SF_2']['winner'] == bracket['SF_2']['home']
+        else bracket['SF_2']['home']
+    )
+    res3 = predict_bracket_match(
+        loser_sf1, loser_sf2, 'Third',
+        team_cache, h2h_cache,
+        continent_winrate, model, top_features
+    )
+    res3['venue'] = '마이애미'
+    res3['date']  = '07.19'
+    bracket['THIRD'] = res3
+
+    finalist = (
+        bracket['FINAL']['away']
+        if bracket['FINAL']['winner'] == bracket['FINAL']['home']
+        else bracket['FINAL']['home']
+    )
+
+    return {
+        'bracket':  bracket,
+        'champion': bracket['FINAL']['winner'],
+        'finalist': finalist,
+        'third':    bracket['THIRD']['winner'],
+    }
+
+
+# ================================
+# What-if 시나리오 함수
+# ================================
+
+def simulate_what_if(group_name, fixed_results,
+                     team_cache, h2h_cache,
+                     continent_winrate, model, top_features,
+                     n_sim=500):
+    """
+    What-if 시나리오 시뮬레이션
+
+    "만약 한국이 1차전에서 이기면?"
+    → 나머지 경기를 확률 기반 시뮬레이션
+    → 16강 진출 확률 변동 계산
+
+    Parameters:
+        group_name:    조 이름 (예: 'A')
+        fixed_results: 고정할 경기 결과 리스트
+            [{'home': 'Korea', 'away': 'France', 'result': 'home_win'}]
+        n_sim:         시뮬레이션 횟수 (기본 500)
+    """
+    from predict import ensemble_predict
+
+    teams       = GROUPS_2026[group_name]
+    all_matches = [
+        (teams[i], teams[j])
+        for i in range(len(teams))
+        for j in range(i + 1, len(teams))
+    ]
+
+    # 기본 확률 (고정 없음)
+    base_qualify = {team: 0 for team in teams}
+    for _ in range(n_sim):
+        standings = {t: {'pts': 0, 'gd': 0, 'gf': 0} for t in teams}
+        for home, away in all_matches:
+            result = ensemble_predict(
+                home, away,
+                team_cache, h2h_cache,
+                continent_winrate, model, top_features
+            )
+            rand = np.random.random() * 100
+            if rand < result['home_win']:
+                standings[home]['pts'] += 3
+                standings[home]['gd']  += 1
+                standings[away]['gd']  -= 1
+                standings[home]['gf']  += 2
+                standings[away]['gf']  += 1
+            elif rand < result['home_win'] + result['draw']:
+                standings[home]['pts'] += 1
+                standings[away]['pts'] += 1
+                standings[home]['gf']  += 1
+                standings[away]['gf']  += 1
+            else:
+                standings[away]['pts'] += 3
+                standings[away]['gd']  += 1
+                standings[home]['gd']  -= 1
+                standings[away]['gf']  += 2
+                standings[home]['gf']  += 1
+
+        sorted_teams = sorted(
+            teams,
+            key=lambda t: (standings[t]['pts'], standings[t]['gd'], standings[t]['gf']),
+            reverse=True
+        )
+        for t in sorted_teams[:2]:
+            base_qualify[t] += 1
+
+    base_probs = {t: round(base_qualify[t] / n_sim * 100, 1) for t in teams}
+
+    # 시나리오 시뮬레이션 (고정 결과 적용)
+    scenario_qualify = {team: 0 for team in teams}
+    for _ in range(n_sim):
+        standings = {t: {'pts': 0, 'gd': 0, 'gf': 0} for t in teams}
+        for home, away in all_matches:
+
+            # 고정된 결과 확인
+            fixed = None
+            for fr in fixed_results:
+                if ((fr['home'] == home and fr['away'] == away) or
+                        (fr['home'] == away and fr['away'] == home)):
+                    fixed = fr
+                    break
+
+            if fixed:
+                winner_is_home = (
+                    (fixed['result'] == 'home_win' and fixed['home'] == home) or
+                    (fixed['result'] == 'away_win' and fixed['away'] == home)
+                )
+                winner_is_away = (
+                    (fixed['result'] == 'away_win' and fixed['away'] == away) or
+                    (fixed['result'] == 'home_win' and fixed['home'] == away)
+                )
+
+                if fixed['result'] == 'draw':
+                    standings[home]['pts'] += 1
+                    standings[away]['pts'] += 1
+                    standings[home]['gf']  += 1
+                    standings[away]['gf']  += 1
+                elif winner_is_home:
+                    standings[home]['pts'] += 3
+                    standings[home]['gd']  += 1
+                    standings[away]['gd']  -= 1
+                    standings[home]['gf']  += 2
+                    standings[away]['gf']  += 1
+                else:
+                    standings[away]['pts'] += 3
+                    standings[away]['gd']  += 1
+                    standings[home]['gd']  -= 1
+                    standings[away]['gf']  += 2
+                    standings[home]['gf']  += 1
+            else:
+                result = ensemble_predict(
+                    home, away,
+                    team_cache, h2h_cache,
+                    continent_winrate, model, top_features
+                )
+                rand = np.random.random() * 100
+                if rand < result['home_win']:
+                    standings[home]['pts'] += 3
+                    standings[home]['gd']  += 1
+                    standings[away]['gd']  -= 1
+                    standings[home]['gf']  += 2
+                    standings[away]['gf']  += 1
+                elif rand < result['home_win'] + result['draw']:
+                    standings[home]['pts'] += 1
+                    standings[away]['pts'] += 1
+                    standings[home]['gf']  += 1
+                    standings[away]['gf']  += 1
+                else:
+                    standings[away]['pts'] += 3
+                    standings[away]['gd']  += 1
+                    standings[home]['gd']  -= 1
+                    standings[away]['gf']  += 2
+                    standings[home]['gf']  += 1
+
+        sorted_teams = sorted(
+            teams,
+            key=lambda t: (standings[t]['pts'], standings[t]['gd'], standings[t]['gf']),
+            reverse=True
+        )
+        for t in sorted_teams[:2]:
+            scenario_qualify[t] += 1
+
+    # 결과 정리
+    scenario_results = []
+    for team in teams:
+        qualify_prob = round(scenario_qualify[team] / n_sim * 100, 1)
+        base_prob    = base_probs.get(team, 0)
+        delta        = round(qualify_prob - base_prob, 1)
+
+        scenario_results.append({
+            'team':         team,
+            'qualify_prob': qualify_prob,
+            'base_prob':    base_prob,
+            'delta':        delta,
+            'delta_str':    f"+{delta}" if delta > 0 else str(delta),
+            'rank':         team_cache.get(team, {}).get('rank', 99),
+        })
+
+    scenario_results.sort(key=lambda x: x['qualify_prob'], reverse=True)
+
+    return {
+        'group':         group_name,
+        'teams':         teams,
+        'fixed_results': fixed_results,
+        'scenario':      scenario_results,
+        'simulations':   n_sim,
     }

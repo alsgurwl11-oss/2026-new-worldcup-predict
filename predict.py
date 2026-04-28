@@ -9,6 +9,11 @@ from config import (
     GROUPS_2026, TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED,
     TEAM_OVERALL_STRENGTH, TEAM_INJURY_INDEX, TEAM_FORM_INDEX
 )
+from scipy.stats import poisson
+from config import (
+    DEFAULT_XG, VENUE_XG_MODIFIER,
+    ROUND_DEFENSIVE_FACTOR, MAX_GOALS
+)
 
 # ================================
 # 1. 강도 계산 함수들
@@ -270,4 +275,127 @@ def get_team_analysis(team, team_cache, h2h_cache,
             reverse=True
         ).index(team) + 1 if team in TEAM_STRENGTH_FC25 else 99,
         'matchups':   matchups,
+    }
+    # ================================
+# predict.py에 추가할 내용
+# ================================
+# 파일 상단 import에 추가:
+# from scipy.stats import poisson
+# from config import (
+#     DEFAULT_XG, VENUE_XG_MODIFIER,
+#     ROUND_DEFENSIVE_FACTOR, MAX_GOALS
+# )
+# ================================
+
+from scipy.stats import poisson
+from config import (
+    DEFAULT_XG, VENUE_XG_MODIFIER,
+    ROUND_DEFENSIVE_FACTOR, MAX_GOALS
+)
+
+
+def calculate_team_xg(team, opponent, team_cache, venue='neutral'):
+    """
+    팀의 기대 득점(xG) 계산
+
+    공식:
+      base_xg = 팀 평균득점 × (리그평균실점 / 상대팀 평균실점)
+      → 상대 수비가 약하면 xG 올라감
+      → 상대 수비가 강하면 xG 내려감
+
+    FC25 능력치 보정 + 홈/원정 보정 추가
+    """
+    tc = team_cache.get(team, {})
+    oc = team_cache.get(opponent, {})
+
+    team_gf    = tc.get('gf', 1.2)
+    opp_ga     = oc.get('ga', 1.2)
+    league_avg = 1.2
+
+    # 기본 xG 계산
+    if opp_ga > 0:
+        xg = team_gf * (opp_ga / league_avg)
+    else:
+        rank = tc.get('rank', 50)
+        if rank <= 15:   xg = DEFAULT_XG['strong']
+        elif rank <= 40: xg = DEFAULT_XG['mid']
+        else:            xg = DEFAULT_XG['weak']
+
+    # FC25 능력치 보정 (1점 차이 = 1%)
+    fc25_diff = tc.get('fc25_top11', 68) - oc.get('fc25_top11', 68)
+    xg *= (1 + fc25_diff * 0.01)
+
+    # 홈/어웨이 보정
+    xg *= VENUE_XG_MODIFIER.get(venue, 1.0)
+
+    # 범위 클리핑 (비현실적 값 방지)
+    return round(max(0.3, min(xg, 3.5)), 2)
+
+
+def predict_scoreline(home, away, team_cache,
+                      venue='neutral', round_name='Group'):
+    """
+    포아송 분포 기반 예상 스코어라인
+
+    원리:
+      P(홈 h골, 원정 a골) = P_poisson(h, home_xg) × P_poisson(a, away_xg)
+      축구 골은 독립적 희귀 사건 → 포아송 분포 적합
+
+    반환:
+      top5: 가장 가능한 5개 스코어
+      home_xg / away_xg: 기대 득점
+      btts: 양팀 모두 득점 확률
+      over_25 / under_25: 오버언더 2.5
+      clean_sheet_home / away: 무실점 확률
+    """
+    # 1. 기대 득점 계산
+    home_xg = calculate_team_xg(home, away, team_cache, venue)
+    away_xg = calculate_team_xg(away, home, team_cache, venue)
+
+    # 2. 라운드별 수비 강화 보정
+    def_factor = ROUND_DEFENSIVE_FACTOR.get(round_name, 1.0)
+    home_xg = round(home_xg * def_factor, 2)
+    away_xg = round(away_xg * def_factor, 2)
+
+    # 3. 모든 스코어 조합 확률 계산
+    scorelines = []
+    for h in range(MAX_GOALS + 1):
+        for a in range(MAX_GOALS + 1):
+            prob = poisson.pmf(h, home_xg) * poisson.pmf(a, away_xg)
+            scorelines.append({
+                'home_goals': h,
+                'away_goals': a,
+                'score':      f"{h}-{a}",
+                'prob':       round(prob * 100, 2),
+            })
+
+    scorelines.sort(key=lambda x: x['prob'], reverse=True)
+
+    # 4. 파생 지표
+    cs_home = round(poisson.pmf(0, away_xg) * 100, 1)  # 내 무실점
+    cs_away = round(poisson.pmf(0, home_xg) * 100, 1)
+
+    btts = round(
+        (1 - poisson.pmf(0, home_xg)) *
+        (1 - poisson.pmf(0, away_xg)) * 100, 1
+    )
+
+    over_25 = round(sum(
+        s['prob'] for s in scorelines
+        if s['home_goals'] + s['away_goals'] >= 3
+    ), 1)
+
+    return {
+        'home':              home,
+        'away':              away,
+        'home_xg':           home_xg,
+        'away_xg':           away_xg,
+        'expected_total':    round(home_xg + away_xg, 2),
+        'top5':              scorelines[:5],
+        'all_scorelines':    scorelines[:15],
+        'clean_sheet_home':  cs_home,
+        'clean_sheet_away':  cs_away,
+        'btts':              btts,
+        'over_25':           over_25,
+        'under_25':          round(100 - over_25, 1),
     }

@@ -312,8 +312,8 @@ MOTIVATION_CONFIG = {
 # --------------------------------
 OVER_UNDER_CONFIG = {
     'confidence_threshold': 0.60,   # 1x2 신뢰도 < 60% → 언오버 전환
-    'group_stage_line': 2.0,        # 조별리그 기준선 (월드컵 평균 2.6골)
-    'knockout_line': 2.5,           # 토너먼트 기준선 (긴장감으로 저득점)
+    'group_stage_line': 2.5,        # 조별리그 기준선 (축구 표준)
+    'knockout_line': 2.5,           # 토너먼트 기준선
     'group_over_adjustment': 0.10,  # 조별리그 오버 약간 유리 보정
 }
 
@@ -699,4 +699,67 @@ GDI_WEIGHTS = {
     'min_strength':  0.35,  # 최약체 강도 (정규화)
     'balance':       0.15,  # 팀 간 균형도 (낮은 편차 = 균등)
     'avg_form':      0.15,  # 평균 최근 폼
+}
+# ================================
+# 2026 월드컵 경기 일정
+# app.py의 베팅픽/조합픽 API에서 사용
+# 구조: {라운드번호: [{'home':..,'away':..,'group':..,'date':..}]}
+# ================================
+WC2026_SCHEDULE = {
+
+    # ===== 1라운드 =====
+    1: [
+        {'home': 'Mexico',                  'away': 'South Africa',          'group': 'A', 'date': '2026-06-12'},
+        {'home': 'South Korea',             'away': 'Czech Republic',        'group': 'A', 'date': '2026-06-12'},
+        {'home': 'Canada',                  'away': 'Bosnia and Herzegovina','group': 'B', 'date': '2026-06-13'},
+        {'home': 'United States',           'away': 'Paraguay',              'group': 'D', 'date': '2026-06-13'},
+        {'home': 'Qatar',                   'away': 'Switzerland',           'group': 'B', 'date': '2026-06-14'},
+        {'home': 'Brazil',                  'away': 'Morocco',               'group': 'C', 'date': '2026-06-14'},
+        {'home': 'Haiti',                   'away': 'Scotland',              'group': 'C', 'date': '2026-06-14'},
+        {'home': 'Australia',               'away': 'Turkey',                'group': 'D', 'date': '2026-06-14'},
+        {'home': 'Germany',                 'away': 'Curacao',               'group': 'E', 'date': '2026-06-15'},
+        {'home': 'Netherlands',             'away': 'Japan',                 'group': 'F', 'date': '2026-06-15'},
+        {'home': 'Ivory Coast',             'away': 'Ecuador',               'group': 'E', 'date': '2026-06-15'},
+        {'home': 'Sweden',                  'away': 'Tunisia',               'group': 'F', 'date': '2026-06-15'},
+        {'home': 'Spain',                   'away': 'Cape Verde',            'group': 'H', 'date': '2026-06-16'},
+        {'home': 'Belgium',                 'away': 'Egypt',                 'group': 'G', 'date': '2026-06-16'},
+        {'home': 'Saudi Arabia',            'away': 'Uruguay',               'group': 'H', 'date': '2026-06-16'},
+        {'home': 'Iran',                    'away': 'New Zealand',           'group': 'G', 'date': '2026-06-16'},
+        {'home': 'France',                  'away': 'Senegal',               'group': 'I', 'date': '2026-06-17'},
+        {'home': 'Iraq',                    'away': 'Norway',                'group': 'I', 'date': '2026-06-17'},
+        {'home': 'Argentina',               'away': 'Algeria',               'group': 'J', 'date': '2026-06-17'},
+        {'home': 'Austria',                 'away': 'Jordan',                'group': 'J', 'date': '2026-06-17'},
+        {'home': 'Portugal',                'away': 'DR Congo',              'group': 'K', 'date': '2026-06-18'},
+        {'home': 'England',                 'away': 'Croatia',               'group': 'L', 'date': '2026-06-18'},
+        {'home': 'Ghana',                   'away': 'Panama',                'group': 'L', 'date': '2026-06-18'},
+        {'home': 'Uzbekistan',              'away': 'Colombia',              'group': 'K', 'date': '2026-06-18'},
+    ],
+
+    # ===== 2라운드 =====
+    2: [
+        {'home': 'Czech Republic',          'away': 'South Africa',          'group': 'A', 'date': '2026-06-19'},
+        {'home': 'Switzerland',             'away': 'Bosnia and Herzegovina','group': 'B', 'date': '2026-06-19'},
+        {'home': 'Canada',                  'away': 'Qatar',                 'group': 'B', 'date': '2026-06-19'},
+        {'home': 'Mexico',                  'away': 'South Korea',           'group': 'A', 'date': '2026-06-19'},
+        {'home': 'United States',           'away': 'Australia',             'group': 'D', 'date': '2026-06-20'},
+        {'home': 'Scotland',                'away': 'Morocco',               'group': 'C', 'date': '2026-06-20'},
+        {'home': 'Brazil',                  'away': 'Haiti',                 'group': 'C', 'date': '2026-06-20'},
+        {'home': 'Turkey',                  'away': 'Paraguay',              'group': 'D', 'date': '2026-06-20'},
+        {'home': 'Netherlands',             'away': 'Sweden',                'group': 'F', 'date': '2026-06-21'},
+        {'home': 'Germany',                 'away': 'Ivory Coast',           'group': 'E', 'date': '2026-06-21'},
+        {'home': 'Ecuador',                 'away': 'Curacao',               'group': 'E', 'date': '2026-06-21'},
+        {'home': 'Tunisia',                 'away': 'Japan',                 'group': 'F', 'date': '2026-06-21'},
+        {'home': 'Spain',                   'away': 'Saudi Arabia',          'group': 'H', 'date': '2026-06-22'},
+        {'home': 'Belgium',                 'away': 'Iran',                  'group': 'G', 'date': '2026-06-22'},
+        {'home': 'Uruguay',                 'away': 'Cape Verde',            'group': 'H', 'date': '2026-06-22'},
+        {'home': 'New Zealand',             'away': 'Egypt',                 'group': 'G', 'date': '2026-06-22'},
+        {'home': 'Argentina',               'away': 'Austria',               'group': 'J', 'date': '2026-06-23'},
+        {'home': 'France',                  'away': 'Iraq',                  'group': 'I', 'date': '2026-06-23'},
+        {'home': 'Norway',                  'away': 'Senegal',               'group': 'I', 'date': '2026-06-23'},
+        {'home': 'Jordan',                  'away': 'Algeria',               'group': 'J', 'date': '2026-06-23'},
+        {'home': 'Portugal',                'away': 'Uzbekistan',            'group': 'K', 'date': '2026-06-24'},
+        {'home': 'England',                 'away': 'Ghana',                 'group': 'L', 'date': '2026-06-24'},
+        {'home': 'Panama',                  'away': 'Croatia',               'group': 'L', 'date': '2026-06-24'},
+        {'home': 'Colombia',                'away': 'DR Congo',              'group': 'K', 'date': '2026-06-24'},
+    ],
 }

@@ -446,12 +446,14 @@ def bracket_prediction():
 # ================================
 @app.route('/api/betting_picks/<int:round_num>', methods=['GET'])
 def betting_picks(round_num):
-    from config import WC2026_SCHEDULE
-    from predict import get_betting_strength
+    from config import WC2026_SCHEDULE, OVER_UNDER_CONFIG
+    from predict import get_betting_strength, predict_scoreline
     from upset_model import calculate_uvi
+    from motivation import get_1x2_confidence, get_over_under_recommendation
 
     matches = WC2026_SCHEDULE.get(round_num, [])
-    result = []
+    result  = []
+    OU_THRESHOLD = OVER_UNDER_CONFIG['confidence_threshold']  # 0.60
 
     for match in matches:
         home = match['home']
@@ -467,8 +469,8 @@ def betting_picks(round_num):
             'draw':     pred['draw'],
             'away_win': pred['away_win'],
         }
-        best_outcome = max(probs, key=probs.get)
-        confidence   = probs[best_outcome]
+        best_outcome   = max(probs, key=probs.get)
+        confidence_1x2 = probs[best_outcome] / 100  # 0~1 범위로
 
         # UVI 계산
         home_str = team_cache.get(home, {}).get('fpoints', 500)
@@ -478,7 +480,7 @@ def betting_picks(round_num):
         uvi_result = calculate_uvi(favorite, underdog, team_cache)
         uvi = uvi_result['uvi']
 
-        # 배당 엣지 계산
+        # 배당 엣지 계산 (1x2 기준)
         bet_h = get_betting_strength(home)
         bet_a = get_betting_strength(away)
         total = bet_h + bet_a + 0.001
@@ -488,54 +490,82 @@ def betting_picks(round_num):
             bet_implied = round(bet_a / total * 100, 1)
         else:
             bet_implied = round((1 - bet_h/total - bet_a/total) * 100, 1)
+        edge = round(probs[best_outcome] - bet_implied, 1)
 
-        edge = round(confidence - bet_implied, 1)
+        # --------------------------------
+        # PL 교훈: 1x2 신뢰도 < 60% → 언오버 자동 전환
+        # --------------------------------
+        auto_switched = False
+        ou_data       = None
+        pick_type     = '1x2'   # '1x2' or 'over_under'
 
-        # 픽 라벨
-        if best_outcome == 'home_win': label = f"{home} 승"
-        elif best_outcome == 'away_win': label = f"{away} 승"
-        else: label = '무승부'
+        if confidence_1x2 < OU_THRESHOLD:
+            # xG 기반 오버언더 계산
+            try:
+                scoreline = predict_scoreline(home, away, team_cache, round_name='Group')
+                ou_data   = get_over_under_recommendation(
+                    scoreline['home_xg'], scoreline['away_xg'], 'Group'
+                )
+                auto_switched = True
+                pick_type     = 'over_under'
+            except:
+                pass
 
-        # 추천 기준: 신뢰도 55%+ AND UVI 35% 미만 AND 엣지 양수
-        # 지금은 신뢰도 + UVI 기준 (개막 후 배당 엣지 추가 예정)
-        recommended = confidence >= 55 and uvi < 0.35
+        # 픽 라벨 결정
+        if auto_switched and ou_data:
+            ou_rec   = ou_data['recommendation']           # 'OVER' or 'UNDER'
+            ou_line  = ou_data['line']
+            label    = f"{'오버' if ou_rec == 'OVER' else '언더'} {ou_line}"
+            ou_conf  = ou_data['confidence']
+            recommended = ou_conf >= 60 and uvi < 0.45    # 언오버는 UVI 기준 완화
+        else:
+            if best_outcome == 'home_win': label = f"{home} 승"
+            elif best_outcome == 'away_win': label = f"{away} 승"
+            else: label = '무승부'
+            ou_conf     = None
+            recommended = probs[best_outcome] >= 55 and uvi < 0.35
 
         result.append({
-            'home':         home,
-            'away':         away,
-            'group':        match['group'],
-            'date':         match['date'],
-            'home_win':     pred['home_win'],
-            'draw':         pred['draw'],
-            'away_win':     pred['away_win'],
-            'best_outcome': best_outcome,
-            'confidence':   round(confidence, 1),
-            'uvi':          round(uvi * 100, 1),
-            'edge':         edge,
-            'bet_implied':  bet_implied,
-            'pick_label':   label,
-            'recommended':  recommended,
+            'home':           home,
+            'away':           away,
+            'group':          match['group'],
+            'date':           match['date'],
+            'home_win':       pred['home_win'],
+            'draw':           pred['draw'],
+            'away_win':       pred['away_win'],
+            'best_outcome':   best_outcome,
+            'confidence':     round(probs[best_outcome], 1),
+            'uvi':            round(uvi * 100, 1),
+            'edge':           edge,
+            'bet_implied':    bet_implied,
+            'pick_label':     label,
+            'pick_type':      pick_type,        # 1x2 or over_under
+            'auto_switched':  auto_switched,    # 언오버 자동전환 여부
+            'ou_data':        ou_data,          # 언오버 상세 데이터
+            'recommended':    recommended,
         })
 
     result.sort(key=lambda x: x['confidence'], reverse=True)
     return jsonify(result)
 
 # ================================
-# API - 최적 조합 추천
+# API - 최적 조합 추천 (v2)
+# 개선: 1x2 vs 언오버 중 더 확실한 픽 선택 + 배당엣지 가중치
 # ================================
 @app.route('/api/best_combo/<int:round_num>', methods=['GET'])
 def best_combo(round_num):
-    from config import WC2026_SCHEDULE
+    from config import WC2026_SCHEDULE, MATCH_ODDS_1X2, OVER_UNDER_CONFIG
     from itertools import combinations
     from upset_model import calculate_uvi
+    from predict import predict_scoreline, decimal_to_prob
+    from motivation import get_over_under_recommendation
+    import math
 
     n         = int(request.args.get('n', 5))
     uvi_limit = float(request.args.get('uvi_limit', 100))
     min_conf  = float(request.args.get('min_conf', 0))
+    matches   = WC2026_SCHEDULE.get(round_num, [])
 
-    matches = WC2026_SCHEDULE.get(round_num, [])
-
-    # 전체 경기 예측
     preds = []
     for match in matches:
         home, away = match['home'], match['away']
@@ -544,28 +574,110 @@ def best_combo(round_num):
         except:
             continue
 
-        probs = {'home_win': pred['home_win'],
-                 'draw': pred['draw'], 'away_win': pred['away_win']}
-        best   = max(probs, key=probs.get)
-        conf   = probs[best]
-        label  = f"{home} 승" if best == 'home_win' else \
-                 (f"{away} 승" if best == 'away_win' else '무승부')
+        # ── 1x2 픽 계산 ──
+        probs      = {'home_win': pred['home_win'],
+                      'draw': pred['draw'], 'away_win': pred['away_win']}
+        best_1x2   = max(probs, key=probs.get)
+        conf_1x2   = probs[best_1x2]
 
+        if best_1x2 == 'home_win': label_1x2 = f"{home} 승"
+        elif best_1x2 == 'away_win': label_1x2 = f"{away} 승"
+        else: label_1x2 = '무승부'
+
+        # ── 배당 엣지 계산 ──
+        # 실제 경기 배당으로 implied prob 계산
+        match_key = (home, away)
+        rev_key   = (away, home)
+        edge = 0.0
+        bet_implied = conf_1x2  # 기본값
+
+        if match_key in MATCH_ODDS_1X2:
+            raw_h, raw_d, raw_a = MATCH_ODDS_1X2[match_key]
+            p_h = decimal_to_prob(raw_h)
+            p_d = decimal_to_prob(raw_d)
+            p_a = decimal_to_prob(raw_a)
+            t   = p_h + p_d + p_a
+            if best_1x2 == 'home_win': implied = p_h / t * 100
+            elif best_1x2 == 'away_win': implied = p_a / t * 100
+            else: implied = p_d / t * 100
+            edge        = round(conf_1x2 - implied, 1)
+            bet_implied = round(implied, 1)
+        elif rev_key in MATCH_ODDS_1X2:
+            raw_a, raw_d, raw_h = MATCH_ODDS_1X2[rev_key]
+            p_h = decimal_to_prob(raw_h)
+            p_d = decimal_to_prob(raw_d)
+            p_a = decimal_to_prob(raw_a)
+            t   = p_h + p_d + p_a
+            if best_1x2 == 'home_win': implied = p_h / t * 100
+            elif best_1x2 == 'away_win': implied = p_a / t * 100
+            else: implied = p_d / t * 100
+            edge        = round(conf_1x2 - implied, 1)
+            bet_implied = round(implied, 1)
+
+        # ── 언오버 픽 계산 ──
+        conf_ou   = 0.0
+        label_ou  = ''
+        ou_result = None
+        try:
+            sc       = predict_scoreline(home, away, team_cache, round_name='Group')
+            ou_result = get_over_under_recommendation(
+                sc['home_xg'], sc['away_xg'], 'Group'
+            )
+            conf_ou  = ou_result['confidence']   # 0~100
+            label_ou = f"{'오버' if ou_result['recommendation'] == 'OVER' else '언더'} {ou_result['line']}"
+        except:
+            pass
+
+        # ── 핵심: 1x2 vs 언오버 중 더 확실한 쪽 선택 ──
+        # 단, 1x2 엣지가 양수면 보너스 (+3점) → 배당가치 있는 픽 우대
+        score_1x2 = conf_1x2 + max(edge, 0) * 0.5
+        score_ou  = conf_ou
+
+        if score_ou > score_1x2 and conf_ou > 0:
+            # 언오버가 더 확실
+            pick_label    = label_ou
+            pick_conf     = round(conf_ou, 1)
+            pick_type     = 'over_under'
+            auto_switched = True
+        else:
+            # 1x2가 더 확실 (또는 언오버 계산 실패)
+            pick_label    = label_1x2
+            pick_conf     = round(conf_1x2, 1)
+            pick_type     = '1x2'
+            auto_switched = False
+
+        # ── UVI 계산 ──
         home_str = team_cache.get(home, {}).get('fpoints', 500)
         away_str = team_cache.get(away, {}).get('fpoints', 500)
         fav = home if home_str >= away_str else away
         und = away if home_str >= away_str else home
         uvi = calculate_uvi(fav, und, team_cache)['uvi'] * 100
 
+        # ── 정렬용 가치 점수: 신뢰도 × (1 + 엣지 보정) ──
+        # 엣지 양수 = 모델이 배당보다 높게 봄 = 가치있는 픽
+        edge_bonus   = max(edge, 0) / 100
+        value_score  = (pick_conf / 100) * (1 + edge_bonus)
+
         preds.append({
-            'home': home, 'away': away,
-            'group': match['group'], 'date': match['date'],
-            'confidence': round(conf, 1),
-            'uvi': round(uvi, 1),
-            'pick_label': label,
+            'home':         home,
+            'away':         away,
+            'group':        match['group'],
+            'date':         match['date'],
+            'home_win':     pred['home_win'],
+            'draw':         pred['draw'],
+            'away_win':     pred['away_win'],
+            'confidence':   pick_conf,
+            'uvi':          round(uvi, 1),
+            'pick_label':   pick_label,
+            'pick_type':    pick_type,
+            'auto_switched': auto_switched,
+            'edge':         edge,
+            'bet_implied':  bet_implied,
+            'ou_data':      ou_result,
+            'value_score':  round(value_score, 4),
         })
 
-    # 필터
+    # ── 필터: UVI 상한 + 최소 신뢰도 ──
     filtered = [m for m in preds
                 if m['uvi'] <= uvi_limit and m['confidence'] >= min_conf]
 
@@ -575,16 +687,20 @@ def best_combo(round_num):
             'available': len(filtered)
         }), 400
 
-    # 전체 조합 계산 → TOP5
+    # ── 조합 계산: value_score 기반 정렬 → TOP5 ──
     best_combos = sorted([
         {
             'matches':    list(combo),
             'combo_prob': round(
-                __import__('math').prod(m['confidence']/100 for m in combo) * 100, 1
+                math.prod(m['confidence'] / 100 for m in combo) * 100, 1
+            ),
+            # 조합 가치 점수: 각 픽의 value_score 곱
+            'combo_value': round(
+                math.prod(m['value_score'] for m in combo) * 10000, 2
             ),
         }
         for combo in combinations(filtered, n)
-    ], key=lambda x: x['combo_prob'], reverse=True)[:5]
+    ], key=lambda x: x['combo_value'], reverse=True)[:5]
 
     return jsonify(best_combos)
 if __name__ == '__main__':
@@ -592,4 +708,4 @@ if __name__ == '__main__':
     print("http://127.0.0.1:5000 접속하세요\n")
     import os
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)  
+    app.run(host='0.0.0.0', port=port, debug=True)

@@ -584,6 +584,7 @@ async function loadBettingCombo() {
                 display:flex;align-items:center;gap:15px;flex-wrap:wrap;font-size:0.85em;">
         <span style="color:#aaa;">📊 ${currentRound}라운드 · ${currentFolder}폴더 · UVI ${currentUvi === 100 ? '전체' : currentUvi+'% 이하'}</span>
         <span style="color:#4aff4a;">C(24,${currentFolder}) = ${combo(24,currentFolder).toLocaleString()}가지 중 TOP5</span>
+        <span style="color:#ff9900;font-size:0.8em;">💡 신뢰도×배당가치 기준 정렬 | ⇄ = 언오버 전환픽</span>
     </div>`;
 
     data.forEach((item, idx) => {
@@ -627,8 +628,13 @@ async function loadBettingCombo() {
                     <div style="color:#aaa;font-size:0.75em;margin-top:2px;">${m.group}조 · ${m.date}</div>
                 </div>
                 <div style="background:#1a1a3e;border-radius:6px;padding:5px 12px;text-align:center;">
-                    <div style="font-size:0.75em;color:#aaa;margin-bottom:2px;">추천</div>
-                    <div style="font-weight:bold;font-size:0.9em;color:#fff;">${m.pick_label}</div>
+                    <div style="font-size:0.75em;color:#aaa;margin-bottom:2px;">
+                        ${m.auto_switched ? '<span style="color:#ff9900;">⇄ 언오버</span>' : '추천'}
+                    </div>
+                    <div style="font-weight:bold;font-size:0.9em;color:${m.auto_switched ? '#ff9900' : '#fff'};">
+                        ${m.pick_label}
+                    </div>
+                    ${m.edge > 0 && !m.auto_switched ? `<div style="font-size:0.65em;color:#4aff4a;margin-top:2px;">+${m.edge}% 엣지</div>` : ''}
                 </div>
                 <div style="text-align:center;min-width:55px;">
                     <div style="font-size:0.7em;color:#aaa;">신뢰도</div>
@@ -677,10 +683,16 @@ async function getBettingPicksSummary(round) {
         html += `<div style="margin-bottom:12px;">
             <div style="color:#4aff4a;font-size:0.85em;margin-bottom:8px;">⭐ 추천 (${rec.length}경기)</div>`;
         rec.forEach(m => {
-            html += `<div style="display:flex;justify-content:space-between;padding:6px 0;
-                                 border-bottom:1px solid #1a1a3e;font-size:0.85em;">
+            // 언오버 자동전환 뱃지
+            const ouBadge = m.auto_switched
+                ? `<span style="background:#ff9900;color:#000;border-radius:4px;
+                               padding:1px 5px;font-size:0.72em;margin-right:4px;vertical-align:middle;">⇄ 언오버</span>`
+                : '';
+            const pickColor = m.auto_switched ? '#ff9900' : '#4aff4a';
+            html += `<div style="display:flex;justify-content:space-between;align-items:center;
+                                 padding:6px 0;border-bottom:1px solid #1a1a3e;font-size:0.85em;">
                 <span>${m.home} vs ${m.away}</span>
-                <span style="color:#4aff4a;font-weight:bold;">${m.pick_label} ${m.confidence}%</span>
+                <span style="color:${pickColor};font-weight:bold;">${ouBadge}${m.pick_label} ${m.confidence}%</span>
             </div>`;
         });
         html += '</div>';

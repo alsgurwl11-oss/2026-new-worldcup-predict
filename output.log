@@ -1,0 +1,23 @@
+서버 초기화 중...
+ OK 경기 데이터 로딩 완료: 31,111경기
+ OK FIFA 랭킹 데이터 로딩 완료: 199,490행
+ OK 월드컵 경기: 12551경기
+
+저장된 모델 불러오는 중... (빠름!) >>
+ OK 모델 로딩 완료!
+ OK 서버 준비 완료!
+
+>> Flask 서버 시작!
+http://127.0.0.1:5000 접속하세요
+
+ * Serving Flask app 'app'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://211.195.89.74:5000
+Press CTRL+C to quit
+127.0.0.1 - - [09/May/2026 23:26:58] "GET / HTTP/1.1" 200 -
+127.0.0.1 - - [09/May/2026 23:26:58] "GET /static/js/advanced.js HTTP/1.1" 304 -
+127.0.0.1 - - [09/May/2026 23:26:58] "GET /static/js/main.js HTTP/1.1" 304 -
+127.0.0.1 - - [09/May/2026 23:27:00] "POST /api/simulate_group HTTP/1.1" 200 -

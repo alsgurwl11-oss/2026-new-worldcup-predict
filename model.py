@@ -35,7 +35,7 @@ def load_match_data():
 
     df=df[df['date'] >= '1992-01-01'].copy().reset_index(drop=True)
     df['result'] = df.apply(_get_result, axis=1)
-    print(f"✅ 경기 데이터 로딩 완료: {len(df):,}경기")
+    print(f" OK 경기 데이터 로딩 완료: {len(df):,}경기")
     return df
 
 def load_ranking_data():
@@ -46,7 +46,7 @@ def load_ranking_data():
     ranking = pd.concat([r1, r2, r3], ignore_index=True)
     ranking['rank_date'] = pd.to_datetime(ranking['rank_date'])
     ranking = ranking.sort_values('rank_date').reset_index(drop=True)
-    print(f"✅ FIFA 랭킹 데이터 로딩 완료: {len(ranking):,}행")
+    print(f" OK FIFA 랭킹 데이터 로딩 완료: {len(ranking):,}행")
     return ranking
 
 def _get_result(row):
@@ -221,7 +221,7 @@ def calculate_continent_winrate(df):
                 if len(filtered) >= 5 else 0.33
             )
 
-    print("✅ 대륙간 상성 계산 완료")
+    print(" OK 대륙간 상성 계산 완료")
     return continent_winrate
 
 # ================================
@@ -229,7 +229,7 @@ def calculate_continent_winrate(df):
 # ================================
 def build_features(wc_df, df, ranking, continent_winrate):
     """월드컵 경기 데이터로 피처 생성"""
-    print(f"피처 생성 중... ({len(wc_df)}경기) ☕")
+    print(f"피처 생성 중... ({len(wc_df)}경기)  ...")
     features = []
 
     for idx, row in wc_df.iterrows():
@@ -318,7 +318,7 @@ def build_features(wc_df, df, ranking, continent_winrate):
         if idx % 100 == 0:
             print(f"  진행중... {idx}/{len(wc_df)}")
 
-    print(f"✅ 피처 생성 완료: {len(features[0])}개 피처")
+    print(f" OK 피처 생성 완료: {len(features[0])}개 피처")
     return pd.DataFrame(features)
 
 # ================================
@@ -356,7 +356,7 @@ def build_team_cache(df, ranking, wc_df):
         } 
         print(f"  {team:<30} 랭킹: {team_cache[team]['rank']}위  폼: {team_cache[team]['form']:.2f}")
 
-    print("✅ 팀 캐싱 완료!")
+    print(" OK 팀 캐싱 완료!")
     return team_cache
 
 def build_h2h_cache(df):
@@ -371,7 +371,7 @@ def build_h2h_cache(df):
                 home, away = teams[i], teams[j]
                 h2h_cache[(home, away)] = get_h2h(home, away, date, df)
 
-    print("✅ H2H 캐싱 완료!")
+    print(" OK H2H 캐싱 완료!")
     return h2h_cache
 
 # ================================
@@ -394,7 +394,7 @@ def train_model(feat_df, wc_df):
         index=top_features
     ).sort_values(ascending=False)
 
-    print("\n✅ 모델 학습 완료!")
+    print("\n OK 모델 학습 완료!")
     print("--- 피처 중요도 TOP 10 ---")
     print(importance.head(10))
 
@@ -413,13 +413,13 @@ def save_model(model, top_features, continent_winrate, team_cache, h2h_cache):
             'team_cache':        team_cache,
             'h2h_cache':         h2h_cache,
         }, f)
-    print(f"✅ 모델 저장 완료! ({DATA_FILES['model']})")
+    print(f" OK 모델 저장 완료! ({DATA_FILES['model']})")
 
 def load_model():
     """저장된 모델 로딩"""
     with open(DATA_FILES['model'], 'rb') as f:
         saved = pickle.load(f)
-    print("✅ 모델 로딩 완료!")
+    print(" OK 모델 로딩 완료!")
     return (
         saved['model'],
         saved['top_features'],
@@ -456,13 +456,13 @@ def initialize():
     'Gold Cup',
     ]
     wc_df = df[df['tournament'].isin(HIGH_QUALITY)].copy().reset_index(drop=True)
-    print(f"✅ 월드컵 경기: {len(wc_df)}경기")
+    print(f" OK 월드컵 경기: {len(wc_df)}경기")
 
     if model_exists():
-        print("\n저장된 모델 불러오는 중... (빠름!) 🚀")
+        print("\n저장된 모델 불러오는 중... (빠름!) >>")
         model, top_features, continent_winrate, team_cache, h2h_cache = load_model()
     else:
-        print("\n첫 실행 - 모델 학습 중... (5~10분 소요) ☕")
+        print("\n첫 실행 - 모델 학습 중... (5~10분 소요)  ...")
         continent_winrate = calculate_continent_winrate(df)
         feat_df           = build_features(wc_df, df, ranking, continent_winrate)
         model, top_features = train_model(feat_df, wc_df)

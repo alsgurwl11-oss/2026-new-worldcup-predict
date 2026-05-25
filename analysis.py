@@ -17,7 +17,7 @@ perf      = pd.read_csv('data/player_performances.csv')
 natl      = pd.read_csv('data/player_national_performances.csv')
 market    = pd.read_csv('data/player_market_value.csv')
 
-print("✅ 데이터 로딩 완료!")
+print("OK 데이터 로딩 완료!")
 
 # ================================
 # 설정
@@ -66,7 +66,7 @@ print("\n참가국 선수 필터링 중...")
 wc_profiles = profiles[profiles['citizenship'].apply(is_wc_player)].copy()
 wc_profiles['primary_nation'] = wc_profiles['citizenship'].apply(extract_primary_nation)
 wc_player_ids = wc_profiles['player_id'].tolist()
-print(f"✅ 참가국 선수: {len(wc_profiles)}명")
+print(f"OK 참가국 선수: {len(wc_profiles)}명")
 
 # ================================
 # 2. 부상 취약도 지수
@@ -95,7 +95,7 @@ nation_injury['injury_index'] = (
     nation_injury['total_injuries'] / max_inj * 0.5
 ).round(3)
 
-print("✅ 부상 취약도 계산 완료!")
+print("OK 부상 취약도 계산 완료!")
 
 # ================================
 # 3. 시장가치 기반 팀 전력
@@ -128,7 +128,7 @@ nation_market['market_strength'] = (
     nation_market['top23_market_value'] / max_val
 ).round(4)
 
-print("✅ 시장가치 계산 완료!")
+print("OK 시장가치 계산 완료!")
 
 # ================================
 # 리그 수준 가중치
@@ -229,7 +229,7 @@ player_form = field.groupby(['player_id', 'primary_nation']).agg(
     가중어시스트     = ('weighted_ast', 'sum'),
 ).reset_index()
 
-# ✅ 출전시간 500분 이상만
+# OK 출전시간 500분 이상만
 player_form = player_form[player_form['총출전시간'] >= 500]
 
 # 선수별 공격 기여도
@@ -252,7 +252,7 @@ nation_form['form_index'] = (
     nation_form['form_score'] / max_form
 ).round(4)
 
-print("✅ 폼 지수 계산 완료!")
+print("OK 폼 지수 계산 완료!")
 print(nation_form.sort_values('form_index', ascending=False).head(10).to_string())
 
 # ================================

@@ -1,7 +1,11 @@
 # ================================
 # app.py - Flask 라우트만 담당
 # ================================
-
+import sys
+import os
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 import time
 import pandas as pd
 from predict import predict_scoreline
@@ -24,18 +28,22 @@ from upset_model import (
     get_confidence_level
 )
 from config import GROUPS_2026
-
+from lineup_engine import load_fc26, preload_all_lineups, build_lineup, calculate_lineup_adjustment
 app = Flask(__name__)
 
 # ================================
 # 서버 시작 시 초기화
 # ================================
 print("서버 초기화 중...")
+print("라인업 데이터 로딩 중...")
+fc26_df = load_fc26()
+lineup_cache = preload_all_lineups(GROUPS_2026, fc26_df)
+print(" OK 라인업 캐싱 완료!")
 (
     model, top_features, continent_winrate,
     team_cache, h2h_cache, df, ranking, wc_df
 ) = initialize()
-print("✅ 서버 준비 완료!")
+print(" OK 서버 준비 완료!")
 
 # ================================
 # 공통 예측 인자 묶음
@@ -352,10 +360,67 @@ def what_if():
     return jsonify(result)
 
 
+# API - 기본 라인업 조회
+@app.route('/api/lineup/<team>', methods=['GET'])
+def get_lineup(team):
+    from urllib.parse import unquote
+    team = unquote(team)
+    formation = request.args.get('formation', None)
+    if formation:
+        lineup = build_lineup(team, formation=formation, fc26_df=fc26_df)
+    else:
+        lineup = lineup_cache.get(team)
+        if not lineup:
+            lineup = build_lineup(team, fc26_df=fc26_df)
+    return jsonify(lineup)
+
+# API - 커스텀 라인업으로 예측
+@app.route('/api/predict_with_lineup', methods=['POST'])
+def predict_with_lineup():
+    data = request.json
+    home = data.get('home')
+    away = data.get('away')
+    home_formation = data.get('home_formation')
+    away_formation = data.get('away_formation')
+    home_players = data.get('home_players')  # 커스텀 라인업
+    away_players = data.get('away_players')
+
+    # 기본 예측
+    base = ensemble_predict(home, away, **pred_args())
+
+    # 라인업 강도 계산
+    if home_players:
+        from lineup_engine import calculate_custom_lineup_strength
+        home_lu = calculate_custom_lineup_strength(home, home_formation, home_players)
+        away_lu = calculate_custom_lineup_strength(away, away_formation, away_players)
+    else:
+        home_lu = lineup_cache.get(home, build_lineup(home, fc26_df=fc26_df))
+        away_lu = lineup_cache.get(away, build_lineup(away, fc26_df=fc26_df))
+
+    adj = calculate_lineup_adjustment(home_lu, away_lu)
+    adj_val = adj['total_home_adj']
+
+    # 확률 보정
+    home_win = round(base['home_win'] + adj_val, 1)
+    away_win = round(base['away_win'] - adj_val, 1)
+    draw     = round(base['draw'], 1)
+
+    # 정규화
+    total = home_win + draw + away_win
+    return jsonify({
+        'home': home, 'away': away,
+        'home_win':  round(home_win / total * 100, 1),
+        'draw':      round(draw     / total * 100, 1),
+        'away_win':  round(away_win / total * 100, 1),
+        'base':      base,
+        'adjustment': adj,
+        'home_lineup': home_lu,
+        'away_lineup': away_lu,
+    })
 # ================================
 # API - 예상 대진표 브라켓
 # ================================
-# ✅ 이렇게 기존 함수 안에 넣는 거야
+#  OK 이렇게 기존 함수 안에 넣는 거야
 
 @app.route('/api/bracket_prediction', methods=['GET'])
 def bracket_prediction():
@@ -376,9 +441,155 @@ def bracket_prediction():
         return jsonify(output)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+# ================================
+# API - 라운드별 베팅 픽
+# ================================
+@app.route('/api/betting_picks/<int:round_num>', methods=['GET'])
+def betting_picks(round_num):
+    from config import WC2026_SCHEDULE
+    from predict import get_betting_strength
+    from upset_model import calculate_uvi
+
+    matches = WC2026_SCHEDULE.get(round_num, [])
+    result = []
+
+    for match in matches:
+        home = match['home']
+        away = match['away']
+
+        try:
+            pred = ensemble_predict(home, away, **pred_args())
+        except:
+            continue
+
+        probs = {
+            'home_win': pred['home_win'],
+            'draw':     pred['draw'],
+            'away_win': pred['away_win'],
+        }
+        best_outcome = max(probs, key=probs.get)
+        confidence   = probs[best_outcome]
+
+        # UVI 계산
+        home_str = team_cache.get(home, {}).get('fpoints', 500)
+        away_str = team_cache.get(away, {}).get('fpoints', 500)
+        favorite = home if home_str >= away_str else away
+        underdog = away if home_str >= away_str else home
+        uvi_result = calculate_uvi(favorite, underdog, team_cache)
+        uvi = uvi_result['uvi']
+
+        # 배당 엣지 계산
+        bet_h = get_betting_strength(home)
+        bet_a = get_betting_strength(away)
+        total = bet_h + bet_a + 0.001
+        if best_outcome == 'home_win':
+            bet_implied = round(bet_h / total * 100, 1)
+        elif best_outcome == 'away_win':
+            bet_implied = round(bet_a / total * 100, 1)
+        else:
+            bet_implied = round((1 - bet_h/total - bet_a/total) * 100, 1)
+
+        edge = round(confidence - bet_implied, 1)
+
+        # 픽 라벨
+        if best_outcome == 'home_win': label = f"{home} 승"
+        elif best_outcome == 'away_win': label = f"{away} 승"
+        else: label = '무승부'
+
+        # 추천 기준: 신뢰도 55%+ AND UVI 35% 미만 AND 엣지 양수
+        # 지금은 신뢰도 + UVI 기준 (개막 후 배당 엣지 추가 예정)
+        recommended = confidence >= 55 and uvi < 0.35
+
+        result.append({
+            'home':         home,
+            'away':         away,
+            'group':        match['group'],
+            'date':         match['date'],
+            'home_win':     pred['home_win'],
+            'draw':         pred['draw'],
+            'away_win':     pred['away_win'],
+            'best_outcome': best_outcome,
+            'confidence':   round(confidence, 1),
+            'uvi':          round(uvi * 100, 1),
+            'edge':         edge,
+            'bet_implied':  bet_implied,
+            'pick_label':   label,
+            'recommended':  recommended,
+        })
+
+    result.sort(key=lambda x: x['confidence'], reverse=True)
+    return jsonify(result)
+
+# ================================
+# API - 최적 조합 추천
+# ================================
+@app.route('/api/best_combo/<int:round_num>', methods=['GET'])
+def best_combo(round_num):
+    from config import WC2026_SCHEDULE
+    from itertools import combinations
+    from upset_model import calculate_uvi
+
+    n         = int(request.args.get('n', 5))
+    uvi_limit = float(request.args.get('uvi_limit', 100))
+    min_conf  = float(request.args.get('min_conf', 0))
+
+    matches = WC2026_SCHEDULE.get(round_num, [])
+
+    # 전체 경기 예측
+    preds = []
+    for match in matches:
+        home, away = match['home'], match['away']
+        try:
+            pred = ensemble_predict(home, away, **pred_args())
+        except:
+            continue
+
+        probs = {'home_win': pred['home_win'],
+                 'draw': pred['draw'], 'away_win': pred['away_win']}
+        best   = max(probs, key=probs.get)
+        conf   = probs[best]
+        label  = f"{home} 승" if best == 'home_win' else \
+                 (f"{away} 승" if best == 'away_win' else '무승부')
+
+        home_str = team_cache.get(home, {}).get('fpoints', 500)
+        away_str = team_cache.get(away, {}).get('fpoints', 500)
+        fav = home if home_str >= away_str else away
+        und = away if home_str >= away_str else home
+        uvi = calculate_uvi(fav, und, team_cache)['uvi'] * 100
+
+        preds.append({
+            'home': home, 'away': away,
+            'group': match['group'], 'date': match['date'],
+            'confidence': round(conf, 1),
+            'uvi': round(uvi, 1),
+            'pick_label': label,
+        })
+
+    # 필터
+    filtered = [m for m in preds
+                if m['uvi'] <= uvi_limit and m['confidence'] >= min_conf]
+
+    if len(filtered) < n:
+        return jsonify({
+            'error': f'조건 충족 경기 {len(filtered)}개 → {n}폴더 조합 불가',
+            'available': len(filtered)
+        }), 400
+
+    # 전체 조합 계산 → TOP5
+    best_combos = sorted([
+        {
+            'matches':    list(combo),
+            'combo_prob': round(
+                __import__('math').prod(m['confidence']/100 for m in combo) * 100, 1
+            ),
+        }
+        for combo in combinations(filtered, n)
+    ], key=lambda x: x['combo_prob'], reverse=True)[:5]
+
+    return jsonify(best_combos)
 if __name__ == '__main__':
-    print("\n🚀 Flask 서버 시작!")
+    print("\n>> Flask 서버 시작!")
     print("http://127.0.0.1:5000 접속하세요\n")
     import os
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=True)  

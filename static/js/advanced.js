@@ -54,7 +54,7 @@ async function loadUpsetAnalysis() {
         <div style="margin-bottom:20px;padding:15px;background:#1a1a2e;border-radius:10px;">
             <h3 style="margin-bottom:10px;">📊 이변 지수(UVI) 설명</h3>
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;font-size:0.85em;">
-                <div style="background:#0d2d0d;padding:10px;border-radius:8px;text-align:center;"><div style="color:#00ff88;font-weight:bold;">✅ 신뢰도 높음</div><div style="color:#aaa;">UVI 0~20%</div></div>
+                <div style="background:#0d2d0d;padding:10px;border-radius:8px;text-align:center;"><div style="color:#00ff88;font-weight:bold;">OK 신뢰도 높음</div><div style="color:#aaa;">UVI 0~20%</div></div>
                 <div style="background:#2d2d0d;padding:10px;border-radius:8px;text-align:center;"><div style="color:#ffbb44;font-weight:bold;">🟡 이변 가능</div><div style="color:#aaa;">UVI 20~35%</div></div>
                 <div style="background:#2d0d0d;padding:10px;border-radius:8px;text-align:center;"><div style="color:#ff7777;font-weight:bold;">🔴 이변 주의</div><div style="color:#aaa;">UVI 35~50%</div></div>
                 <div style="background:#1a0000;padding:10px;border-radius:8px;text-align:center;"><div style="color:#ff0000;font-weight:bold;">⚡ 이변 경보</div><div style="color:#aaa;">UVI 50%+</div></div>
@@ -183,7 +183,7 @@ async function loadBacktest(year) {
         <thead><tr><th>결과</th><th>홈팀</th><th>원정팀</th><th>라운드</th><th>실제</th><th>예측</th><th>신뢰도</th></tr></thead><tbody>`;
     data.match_details.forEach(m => {
         html += `<tr>
-            <td style="font-size:1.1em;">${m.correct?'✅':'❌'}</td>
+            <td style="font-size:1.1em;">${m.correct?'OK':'❌'}</td>
             <td>${m.home}</td><td>${m.away}</td>
             <td style="color:#aaa;font-size:0.85em;">${m.round}</td>
             <td><strong>${am[m.actual]}</strong></td>

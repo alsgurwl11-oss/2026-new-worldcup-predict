@@ -7,13 +7,15 @@ import numpy as np
 from config import (
     OPTA_WIN_PROB, BETTING_ODDS, ENSEMBLE_WEIGHTS,
     GROUPS_2026, TEAM_STRENGTH_FC25, TEAM_STRENGTH_NORMALIZED,
-    TEAM_OVERALL_STRENGTH, TEAM_INJURY_INDEX, TEAM_FORM_INDEX
+    TEAM_OVERALL_STRENGTH, TEAM_INJURY_INDEX, TEAM_FORM_INDEX,
+    MATCH_ODDS_1X2
 )
 from scipy.stats import poisson
 from config import (
     DEFAULT_XG, VENUE_XG_MODIFIER,
     ROUND_DEFENSIVE_FACTOR, MAX_GOALS
 )
+from motivation import apply_all_adjustments  # PL 교훈 기반 보정 모듈
 
 # ================================
 # 1. 강도 계산 함수들
@@ -110,8 +112,42 @@ def predict_opta(home, away):
     s = h + d + a
     return h/s, d/s, a/s
 
+def decimal_to_prob(decimal_odds: float) -> float:
+    """유럽식 소수 배당 → 확률 변환 (마진 제거 없는 단순 역수)"""
+    return 1.0 / decimal_odds if decimal_odds > 0 else 0.0
+
+
 def predict_betting(home, away):
-    """배당률 역산 기반 예측"""
+    """
+    배당률 기반 예측
+
+    우선순위:
+    1. MATCH_ODDS_1X2 (경기별 1x2 배당) → 가장 정확
+    2. BETTING_ODDS (우승 배당 역산) → 폴백
+    """
+    # 경기별 1x2 배당이 있으면 우선 사용
+    match_key = (home, away)
+    reverse_key = (away, home)
+
+    if match_key in MATCH_ODDS_1X2:
+        raw_h, raw_d, raw_a = MATCH_ODDS_1X2[match_key]
+        # 소수 배당 → 확률 변환 (북마진 제거)
+        p_h = decimal_to_prob(raw_h)
+        p_d = decimal_to_prob(raw_d)
+        p_a = decimal_to_prob(raw_a)
+        total = p_h + p_d + p_a  # 북마진 제거용 정규화
+        return p_h / total, p_d / total, p_a / total
+
+    elif reverse_key in MATCH_ODDS_1X2:
+        # 홈/어웨이 반대로 저장된 경우 뒤집기
+        raw_a, raw_d, raw_h = MATCH_ODDS_1X2[reverse_key]
+        p_h = decimal_to_prob(raw_h)
+        p_d = decimal_to_prob(raw_d)
+        p_a = decimal_to_prob(raw_a)
+        total = p_h + p_d + p_a
+        return p_h / total, p_d / total, p_a / total
+
+    # 폴백: 기존 우승 배당 역산 방식
     h_str = get_betting_strength(home)
     a_str = get_betting_strength(away)
     total = h_str + a_str + 0.001
@@ -137,8 +173,21 @@ def predict_elo(home, away):
 
 def ensemble_predict(home, away, team_cache, h2h_cache,
                      continent_winrate, model, top_features,
-                     neutral=True):
-    """앙상블 최종 예측: ML(35%) + Opta(30%) + 배당률(25%) + ELO(10%)"""
+                     neutral=True, match_context=None, round_name='Group'):
+    """
+    앙상블 최종 예측: 배당(35%) + ELO(25%) + Opta(15%) + ML(15%) + 동기(5%) + 피드백(5%)
+
+    match_context 구조 (선택사항):
+    {
+        'match_day': 1~3,
+        'home': {
+            'already_qualified': False, 'already_eliminated': False,
+            'must_win': True, 'pride_factor': False,
+            'prev_xg': 1.5, 'prev_actual': 1.0,  ← 이전 경기 데이터
+        },
+        'away': { ... }
+    }
+    """
     W = ENSEMBLE_WEIGHTS
 
     ml_probs = predict_ml(
@@ -151,12 +200,41 @@ def ensemble_predict(home, away, team_cache, h2h_cache,
     bet_h,  bet_d,  bet_a  = predict_betting(home, away)
     elo_h,  elo_d,  elo_a  = predict_elo(home, away)
 
+    # 기존 4개 소스 앙상블 (동기/피드백 가중치는 아래서 별도 반영)
+    base_weight_sum = W['ml'] + W['opta'] + W['betting'] + W['elo']
     fh = ml_h*W['ml'] + opta_h*W['opta'] + bet_h*W['betting'] + elo_h*W['elo']
     fd = ml_d*W['ml'] + opta_d*W['opta'] + bet_d*W['betting'] + elo_d*W['elo']
     fa = ml_a*W['ml'] + opta_a*W['opta'] + bet_a*W['betting'] + elo_a*W['elo']
 
     total      = fh + fd + fa
     fh, fd, fa = fh/total, fd/total, fa/total
+
+    # --------------------------------
+    # motivation.py 통합 보정 적용
+    # --------------------------------
+    motivation_applied = False
+    adj_info = {}
+
+    if match_context is not None:
+        # 현재 경기의 xG 계산 (포아송 스코어라인용)
+        home_xg = calculate_team_xg(home, away, team_cache)
+        away_xg = calculate_team_xg(away, home, team_cache)
+
+        # 동기부여 + 로테이션 + 피드백 + 언오버 전환 통합 적용
+        adj = apply_all_adjustments(
+            home, away,
+            fh, fd, fa,
+            home_xg, away_xg,
+            match_context,
+            team_cache,
+            round_name
+        )
+
+        fh = adj['home_prob']
+        fd = adj['draw_prob']
+        fa = adj['away_prob']
+        motivation_applied = True
+        adj_info = adj
 
     return {
         'home_win': round(fh * 100, 1),
@@ -167,7 +245,13 @@ def ensemble_predict(home, away, team_cache, h2h_cache,
             'opta':    {'home': round(opta_h*100,1), 'draw': round(opta_d*100,1), 'away': round(opta_a*100,1)},
             'betting': {'home': round(bet_h*100,1),  'draw': round(bet_d*100,1),  'away': round(bet_a*100,1)},
             'elo':     {'home': round(elo_h*100,1),  'draw': round(elo_d*100,1),  'away': round(elo_a*100,1)},
-        }
+        },
+        # 보정 정보 (프론트엔드에서 뱃지 표시용)
+        'motivation_applied': motivation_applied,
+        'auto_switch_ou':     adj_info.get('auto_switch_ou', False),
+        'confidence_1x2':     adj_info.get('confidence_1x2', max(fh, fd, fa)),
+        'over_under':         adj_info.get('over_under', None),
+        'adjustment_debug':   adj_info.get('debug', {}),
     }
 
 # ================================

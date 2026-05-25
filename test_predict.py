@@ -25,7 +25,7 @@ def test_probability_sum():
     )
     total = result['home_win'] + result['draw'] + result['away_win']
     assert abs(total - 100.0) < 0.1, f"확률 합 오류: {total}"
-    print(f"✅ 테스트1 통과: 확률 합 = {total}%")
+    print(f"OK 테스트1 통과: 확률 합 = {total}%")
 
 # ================================
 # 테스트 2: 강팀이 약팀보다 높은 확률
@@ -38,7 +38,7 @@ def test_strong_vs_weak():
     )
     assert result['home_win'] > result['away_win'], \
         f"브라질이 아이티보다 낮음: {result['home_win']} vs {result['away_win']}"
-    print(f"✅ 테스트2 통과: 브라질 {result['home_win']}% > 아이티 {result['away_win']}%")
+    print(f"OK 테스트2 통과: 브라질 {result['home_win']}% > 아이티 {result['away_win']}%")
 
 # ================================
 # 테스트 3: 없는 팀 입력 시 에러 없이 처리
@@ -51,7 +51,7 @@ def test_unknown_team():
     )
     total = result['home_win'] + result['draw'] + result['away_win']
     assert abs(total - 100.0) < 0.1, f"확률 합 오류: {total}"
-    print(f"✅ 테스트3 통과: 없는 팀 처리 정상")
+    print(f"OK 테스트3 통과: 없는 팀 처리 정상")
 
 # ================================
 # 테스트 4: 같은 팀끼리 50% 근처
@@ -62,7 +62,7 @@ def test_same_strength():
         team_cache, h2h_cache,
         continent_winrate, model, top_features
     )
-    print(f"✅ 테스트4: 프랑스 {result['home_win']}% vs 브라질 {result['away_win']}%")
+    print(f"OK 테스트4: 프랑스 {result['home_win']}% vs 브라질 {result['away_win']}%")
     print(f"   (비슷한 강팀끼리라 큰 차이 없어야 함)")
 
 # ================================
@@ -79,7 +79,7 @@ def test_detail_keys():
     assert 'opta' in result['detail'], "opta 키 없음"
     assert 'betting' in result['detail'], "betting 키 없음"
     assert 'elo' in result['detail'], "elo 키 없음"
-    print(f"✅ 테스트5 통과: detail 키 정상")
+    print(f"OK 테스트5 통과: detail 키 정상")
 
 # ================================
 # 전체 실행

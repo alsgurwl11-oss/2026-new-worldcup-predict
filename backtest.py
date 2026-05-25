@@ -1,237 +1,193 @@
 # ================================
-# backtest.py - 완전 리팩토링
-# 기존 파일을 이걸로 교체
+# backtest.py - 백테스트 함수 모듈
 # ================================
-
-import os
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
-
 import pandas as pd
 import numpy as np
-from itertools import product
-from model import initialize
 from predict import ensemble_predict
-from config import BACKTEST_TOURNAMENTS, ENSEMBLE_WEIGHTS
-import config
+
+BACKTEST_NAME_MAP = {
+    'Korea Republic': 'South Korea',
+    'IR Iran':        'Iran',
+    'USA':            'United States',
+}
+
+BACKTEST_TOURNAMENTS = {
+    '2022': {
+        'name':       '2022 카타르 월드컵',
+        'champion':   'Argentina',
+        'top4':       ['Argentina', 'France', 'Croatia', 'Morocco'],
+    },
+    '2018': {
+        'name':       '2018 러시아 월드컵',
+        'champion':   'France',
+        'top4':       ['France', 'Croatia', 'Belgium', 'England'],
+    },
+}
+
+# --------------------------------
+# 2022 월드컵 사전 배당률 (미국식 머니라인)
+# 출처: William Hill / Ladbrokes / BetMGM (2022년 11월 기준)
+# --------------------------------
+BACKTEST_ODDS_2022 = {
+    'Brazil':        400,
+    'Argentina':     500,
+    'France':        650,
+    'England':       700,
+    'Spain':         800,
+    'Germany':       1000,
+    'Netherlands':   1200,
+    'Portugal':      1500,
+    'Belgium':       1600,
+    'Denmark':       3000,
+    'Uruguay':       4000,
+    'Croatia':       4000,
+    'Poland':        4000,
+    'Senegal':       5000,
+    'Switzerland':   5000,
+    'Mexico':        5000,
+    'United States': 10000,
+    'Wales':         10000,
+    'Japan':         15000,
+    'South Korea':   15000,
+    'Australia':     15000,
+    'Morocco':       15000,
+    'Ecuador':       15000,
+    'Canada':        20000,
+    'Serbia':        20000,
+    'Iran':          30000,
+    'Ghana':         30000,
+    'Tunisia':       30000,
+    'Cameroon':      50000,
+    'Saudi Arabia':  50000,
+    'Costa Rica':    50000,
+    'Qatar':         100000,
+}
+
+# --------------------------------
+# 2018 월드컵 사전 배당률
+# 출처: 주요 북메이커 (2018년 6월 기준)
+# --------------------------------
+BACKTEST_ODDS_2018 = {
+    'Brazil':        400,
+    'Germany':       500,
+    'Spain':         600,
+    'France':        700,
+    'Argentina':     700,
+    'England':       1000,
+    'Belgium':       1000,
+    'Portugal':      1200,
+    'Uruguay':       2000,
+    'Colombia':      2500,
+    'Croatia':       3000,
+    'Poland':        3000,
+    'Switzerland':   5000,
+    'Mexico':        5000,
+    'Denmark':       5000,
+    'Russia':        8000,
+    'Sweden':        8000,
+    'Senegal':       10000,
+    'Japan':         10000,
+    'United States': 15000,
+    'South Korea':   15000,
+    'Australia':     15000,
+    'Morocco':       20000,
+    'Egypt':         20000,
+    'Iceland':       20000,
+    'Peru':          20000,
+    'Iran':          30000,
+    'Costa Rica':    30000,
+    'Serbia':        30000,
+    'Nigeria':       30000,
+    'Tunisia':       50000,
+    'Panama':        50000,
+    'Saudi Arabia':  50000,
+}
 
 
-# ================================
-# 모델 로딩 (백테스트 스크립트 직접 실행 시)
-# ================================
-
-def _load_model():
-    print("모델 로딩 중...")
-    return initialize()
-
-
-# ================================
-# 단일 경기 예측 + 평가
-# ================================
-
-def predict_match(home, away, team_cache, h2h_cache,
-                  continent_winrate, model, top_features):
-    """단일 경기 예측 (예외 처리 포함)"""
-    try:
-        result = ensemble_predict(
-            home, away,
-            team_cache, h2h_cache,
-            continent_winrate, model, top_features
-        )
-        return result
-    except Exception:
-        return {'home_win': 33.3, 'draw': 33.3, 'away_win': 33.3}
-
-
-# ================================
-# 단일 월드컵 백테스트
-# ================================
-
-def run_backtest(tournament_year, hist_df,
-                 team_cache, h2h_cache,
+def run_backtest(year, hist, team_cache, h2h_cache,
                  continent_winrate, model, top_features):
-    """
-    특정 월드컵 백테스트
 
-    프로세스:
-      1. 해당 대회 경기 필터링
-      2. 각 경기 앙상블 예측
-      3. 실제 결과와 비교
-      4. 다양한 지표 계산
-    """
-    tourney = BACKTEST_TOURNAMENTS.get(tournament_year)
-    if not tourney:
-        return {'error': f'{tournament_year} 설정 없음'}
+    # 연도별 배당률 임시 적용
+    import config
+    original_odds = config.BETTING_ODDS.copy()
 
-    wc_year = hist_df[hist_df['Year'] == int(tournament_year)].copy()
+    if str(year) == '2022':
+        config.BETTING_ODDS = {**original_odds, **BACKTEST_ODDS_2022}
+    elif str(year) == '2018':
+        config.BETTING_ODDS = {**original_odds, **BACKTEST_ODDS_2018}
+
+    wc_year = hist[hist['Year'] == int(year)].copy()
     wc_year = wc_year.dropna(subset=['home_score', 'away_score'])
 
-    if len(wc_year) == 0:
-        return {'error': f'{tournament_year} 데이터 없음'}
-
-    predictions = []
+    correct = total = 0
+    match_details = []
 
     for _, row in wc_year.iterrows():
-        home = row['home_team']
-        away = row['away_team']
+        home = BACKTEST_NAME_MAP.get(row['home_team'], row['home_team'])
+        away = BACKTEST_NAME_MAP.get(row['away_team'], row['away_team'])
+        round_name = row.get('Round', 'Group stage')
 
-        # 실제 결과
-        hs = float(row['home_score'])
-        as_ = float(row['away_score'])
-        if hs > as_:   actual = 'home_win'
-        elif hs < as_: actual = 'away_win'
-        else:           actual = 'draw'
+        if row['home_score'] > row['away_score']:   actual = 'home_win'
+        elif row['home_score'] < row['away_score']: actual = 'away_win'
+        else:                                        actual = 'draw'
 
-        # 예측
-        result    = predict_match(home, away, team_cache, h2h_cache,
-                                  continent_winrate, model, top_features)
-        probs     = {
-            'home_win': result['home_win'],
-            'draw':     result['draw'],
-            'away_win': result['away_win'],
-        }
-        predicted  = max(probs, key=probs.get)
-        confidence = max(probs.values())
-        correct    = (predicted == actual)
+        try:
+            pred = ensemble_predict(
+                home, away,
+                team_cache, h2h_cache,
+                continent_winrate, model, top_features
+            )
+            probs = {
+                'home_win': pred['home_win'],
+                'draw':     pred['draw'],
+                'away_win': pred['away_win'],
+            }
+            predicted  = max(probs, key=probs.get)
+            confidence = round(probs[predicted], 1)
+            is_correct = predicted == actual
+            total += 1
+            if is_correct: correct += 1
 
-        predictions.append({
-            'home':       home,
-            'away':       away,
-            'round':      row.get('Round', ''),
-            'actual':     actual,
-            'predicted':  predicted,
-            'correct':    correct,
-            'home_prob':  result['home_win'],
-            'draw_prob':  result['draw'],
-            'away_prob':  result['away_win'],
-            'confidence': round(confidence, 1),
-        })
-
-    df_pred = pd.DataFrame(predictions)
-
-    # 라운드 분리
-    group_df    = df_pred[df_pred['round'].str.contains('Group', na=False)]
-    knockout_df = df_pred[~df_pred['round'].str.contains('Group', na=False)]
-
-    # 4강 맞춤 확인
-    top4_actual = [
-        tourney['champion'], tourney['runner_up'],
-        tourney['third'],    tourney['fourth'],
-    ]
-
-    return {
-        'tournament':          tourney['name'],
-        'year':                tournament_year,
-        'total_matches':       len(df_pred),
-        'total_accuracy':      round(df_pred['correct'].mean() * 100, 1),
-        'group_accuracy':      round(group_df['correct'].mean() * 100, 1) if len(group_df) > 0 else 0,
-        'knockout_accuracy':   round(knockout_df['correct'].mean() * 100, 1) if len(knockout_df) > 0 else 0,
-        'avg_confidence':      round(df_pred['confidence'].mean(), 1),
-        'high_conf_accuracy':  round(
-            df_pred[df_pred['confidence'] >= 50]['correct'].mean() * 100, 1
-        ) if len(df_pred[df_pred['confidence'] >= 50]) > 0 else 0,
-        'high_conf_count':     int((df_pred['confidence'] >= 50).sum()),
-        'champion_actual':     tourney['champion'],
-        'runner_up_actual':    tourney['runner_up'],
-        'top4_actual':         top4_actual,
-        'match_details':       predictions,
-    }
-
-
-# ================================
-# 전체 백테스트 실행
-# ================================
-
-def run_all_backtests(hist_df, team_cache, h2h_cache,
-                      continent_winrate, model, top_features):
-    """모든 설정된 월드컵 백테스트"""
-    results = {}
-    for year in BACKTEST_TOURNAMENTS:
-        print(f"\n=== {year} 백테스트 ===")
-        results[year] = run_backtest(
-            year, hist_df,
-            team_cache, h2h_cache,
-            continent_winrate, model, top_features
-        )
-        r = results[year]
-        if 'error' not in r:
-            print(f"전체: {r['total_accuracy']}% | 조별: {r['group_accuracy']}% | 토너먼트: {r['knockout_accuracy']}%")
-
-    return results
-
-
-# ================================
-# 가중치 최적화 (기존 로직 유지)
-# ================================
-
-def backtest(year, hist_df, team_cache, h2h_cache,
-             continent_winrate, model, top_features):
-    """단순 정확도 반환 (가중치 최적화용)"""
-    result = run_backtest(year, hist_df, team_cache, h2h_cache,
-                          continent_winrate, model, top_features)
-    if 'error' in result:
-        return 0.0
-    return result['total_accuracy']
-
-
-# ================================
-# 스크립트 직접 실행 시
-# ================================
-
-if __name__ == '__main__':
-    (model, top_features, continent_winrate,
-     team_cache, h2h_cache, df, ranking, wc_df) = _load_model()
-
-    hist = pd.read_csv('data/wc_historical.csv')
-
-    print(f"\n현재 가중치: {config.ENSEMBLE_WEIGHTS}")
-
-    # 2022 백테스트
-    r22 = run_backtest('2022', hist, team_cache, h2h_cache,
-                       continent_winrate, model, top_features)
-    print(f"\n2022 전체: {r22['total_accuracy']}%")
-    print(f"2022 조별: {r22['group_accuracy']}%")
-    print(f"2022 토너먼트: {r22['knockout_accuracy']}%")
-    print(f"2022 고신뢰도({r22['high_conf_count']}경기): {r22['high_conf_accuracy']}%")
-
-    # 가중치 최적화
-    print("\n가중치 최적화 중... ☕")
-    best_acc     = 0
-    best_weights = None
-
-    for ml, opta, bet in product(
-        [0.15, 0.20, 0.25, 0.30, 0.35, 0.40],
-        [0.15, 0.20, 0.25, 0.30, 0.35],
-        [0.20, 0.25, 0.30, 0.35, 0.40],
-    ):
-        elo = round(1.0 - ml - opta - bet, 2)
-        if elo < 0.05 or elo > 0.30:
+            match_details.append({
+                'home':       home,
+                'away':       away,
+                'round':      round_name,
+                'actual':     actual,
+                'predicted':  predicted,
+                'confidence': confidence,
+                'correct':    is_correct,
+            })
+        except:
             continue
 
-        config.ENSEMBLE_WEIGHTS = {
-            'ml': ml, 'opta': opta, 'betting': bet, 'elo': elo
-        }
+    # 원래 배당률로 복원
+    config.BETTING_ODDS = original_odds
 
-        acc = backtest('2022', hist, team_cache, h2h_cache,
-                       continent_winrate, model, top_features)
+    info = BACKTEST_TOURNAMENTS.get(str(year), {})
+    high_conf      = [m for m in match_details if m['confidence'] >= 50]
+    group_matches  = [m for m in match_details if 'Group' in str(m['round'])]
+    knockout_matches = [m for m in match_details if 'Group' not in str(m['round'])]
 
-        if acc > best_acc:
-            best_acc     = acc
-            best_weights = {'ml': ml, 'opta': opta, 'betting': bet, 'elo': elo}
-            print(f"  새 최고: {acc:.1f}% → {best_weights}")
-
-    print(f"\n{'='*50}")
-    print(f"최적 가중치: {best_weights}")
-    print(f"최고 정확도: {best_acc:.1f}%")
-    print(f"\n# config.py ENSEMBLE_WEIGHTS 교체:")
-    print(f"ENSEMBLE_WEIGHTS = {{")
-    for k, v in best_weights.items():
-        print(f"    '{k}': {v},")
-    print(f"}}")
-
-    # 기존 가중치 복원
-    config.ENSEMBLE_WEIGHTS = {
-        'ml': 0.20, 'opta': 0.20, 'betting': 0.35, 'elo': 0.25
+    return {
+        'tournament':         info.get('name', f'{year} 월드컵'),
+        'total_accuracy':     round(correct/total*100, 1) if total > 0 else 0,
+        'total_matches':      total,
+        'group_accuracy':     round(sum(m['correct'] for m in group_matches)/len(group_matches)*100, 1) if group_matches else 0,
+        'knockout_accuracy':  round(sum(m['correct'] for m in knockout_matches)/len(knockout_matches)*100, 1) if knockout_matches else 0,
+        'high_conf_accuracy': round(sum(m['correct'] for m in high_conf)/len(high_conf)*100, 1) if high_conf else 0,
+        'high_conf_count':    len(high_conf),
+        'champion_actual':    info.get('champion', ''),
+        'top4_actual':        info.get('top4', []),
+        'match_details':      match_details,
     }
-    old = backtest('2022', hist, team_cache, h2h_cache,
-                   continent_winrate, model, top_features)
-    print(f"\n기존 가중치 2022: {old:.1f}%")
+
+
+def run_all_backtests(hist, team_cache, h2h_cache,
+                      continent_winrate, model, top_features):
+    results = {}
+    for year in ['2022', '2018']:
+        results[year] = run_backtest(
+            year, hist, team_cache, h2h_cache,
+            continent_winrate, model, top_features
+        )
+    return results

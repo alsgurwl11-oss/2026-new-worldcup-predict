@@ -2,6 +2,8 @@
 # simulate.py - 시뮬레이션 함수
 # ================================
 
+import os
+os.environ['OMP_NUM_THREADS'] = '1'
 import numpy as np
 from config import GROUPS_2026, SIM_CONFIG
 from predict import ensemble_predict, get_win_prob_pure

@@ -223,14 +223,118 @@ BETTING_ODDS = {
 }
 
 # --------------------------------
+# 경기별 1x2 배당 (유럽식 소수 배당)
+# 출처: Flashscore (2026.05.25 기준)
+# 구조: (홈팀, 어웨이팀): (홈승, 무승부, 원정승)
+# 우승배당(BETTING_ODDS)보다 훨씬 정확 → 경기별 배당 우선 사용
+# --------------------------------
+MATCH_ODDS_1X2 = {
+
+    # ===== 1라운드 =====
+    ('Mexico',                  'South Africa'):          (1.47, 4.30,  6.90),
+    ('South Korea',             'Czech Republic'):        (2.67, 3.09,  2.77),
+    ('Canada',                  'Bosnia and Herzegovina'): (1.77, 3.84, 4.20),
+    ('United States',           'Paraguay'):              (1.98, 3.55,  3.65),
+    ('Qatar',                   'Switzerland'):           (8.80, 5.70,  1.30),
+    ('Brazil',                  'Morocco'):               (1.62, 3.81,  5.60),
+    ('Haiti',                   'Scotland'):              (6.40, 5.00,  1.42),
+    ('Australia',               'Turkey'):                (4.40, 3.68,  1.79),
+    ('Germany',                 'Curacao'):               (1.03, 15.00, 46.00),
+    ('Netherlands',             'Japan'):                 (2.01, 3.65,  3.47),
+    ('Ivory Coast',             'Ecuador'):               (3.68, 2.77,  2.34),
+    ('Sweden',                  'Tunisia'):               (1.89, 3.41,  4.20),
+    ('Spain',                   'Cape Verde'):            (1.09, 9.60,  26.00),
+    ('Belgium',                 'Egypt'):                 (1.67, 3.88,  4.90),
+    ('Saudi Arabia',            'Uruguay'):               (5.90, 4.20,  1.53),
+    ('Iran',                    'New Zealand'):           (1.86, 3.56,  4.20),
+    ('France',                  'Senegal'):               (1.45, 4.40,  7.00),
+    ('Iraq',                    'Norway'):                (8.80, 6.20,  1.28),
+    ('Argentina',               'Algeria'):               (1.42, 4.30,  8.10),
+    ('Austria',                 'Jordan'):                (1.33, 5.30,  8.30),
+    ('Portugal',                'DR Congo'):              (1.27, 5.90,  10.00),
+    ('England',                 'Croatia'):               (1.75, 3.74,  4.50),
+    ('Ghana',                   'Panama'):                (1.93, 3.83,  3.56),
+    ('Uzbekistan',              'Colombia'):              (7.50, 4.40,  1.43),
+
+    # ===== 2라운드 =====
+    ('Czech Republic',          'South Africa'):          (1.99, 3.26,  4.00),
+    ('Switzerland',             'Bosnia and Herzegovina'): (1.56, 4.10, 5.70),
+    ('Canada',                  'Qatar'):                 (1.50, 4.30,  6.30),
+    ('Mexico',                  'South Korea'):           (1.77, 3.61,  4.60),
+    ('United States',           'Australia'):             (1.73, 3.97,  4.33),
+    ('Scotland',                'Morocco'):               (3.70, 3.14,  2.12),
+    ('Brazil',                  'Haiti'):                 (1.05, 12.00, 36.00),
+    ('Turkey',                  'Paraguay'):              (2.23, 3.13,  3.41),
+    ('Netherlands',             'Sweden'):                (1.62, 4.10,  5.00),
+    ('Germany',                 'Ivory Coast'):           (1.57, 4.20,  5.40),
+    ('Ecuador',                 'Curacao'):               (1.24, 5.80,  12.00),
+    ('Tunisia',                 'Japan'):                 (4.80, 3.29,  1.83),
+    ('Spain',                   'Saudi Arabia'):          (1.11, 8.00,  26.00),
+    ('Belgium',                 'Iran'):                  (1.42, 4.50,  7.50),
+    ('Uruguay',                 'Cape Verde'):            (1.41, 4.50,  7.70),
+    ('New Zealand',             'Egypt'):                 (4.60, 3.79,  1.73),
+    ('Argentina',               'Austria'):               (1.70, 3.64,  5.10),
+    ('France',                  'Iraq'):                  (1.11, 8.80,  23.00),
+    ('Norway',                  'Senegal'):               (1.99, 3.60,  3.59),
+    ('Jordan',                  'Algeria'):               (4.80, 3.71,  1.72),
+    ('Portugal',                'Uzbekistan'):            (1.22, 6.40,  12.00),
+    ('England',                 'Ghana'):                 (1.33, 5.30,  8.40),
+    ('Panama',                  'Croatia'):               (6.70, 3.80,  1.55),
+    ('Colombia',                'DR Congo'):              (1.47, 4.20,  7.10),
+}
+
+# --------------------------------
 # 앙상블 가중치
 # 백테스트 후 최적화 예정
 # --------------------------------
 ENSEMBLE_WEIGHTS = {
-    'ml':      0.20,
-    'opta':    0.20,
-    'betting': 0.35,
-    'elo':     0.25,
+    'ml':         0.15,   # ML 비중 축소 (PL 실험: 승무패 구조적 한계)
+    'opta':       0.15,   # Opta 비중 축소
+    'betting':    0.35,   # 배당률 최우선 유지
+    'elo':        0.25,   # ELO 유지
+    'motivation': 0.05,   # 동기부여지수 신규 (이미 통과/탈락/반드시 이겨야)
+    'feedback':   0.05,   # 경기내용 피드백루프 신규 (이전 경기 xG 반영)
+}
+
+# --------------------------------
+# 동기부여 지수 설정
+# --------------------------------
+MOTIVATION_CONFIG = {
+    'already_qualified': -2,   # 이미 16강 통과 → 동기 낮음
+    'already_eliminated': -3,  # 이미 탈락 확정 → 완전 의욕 상실
+    'must_win': +3,            # 반드시 이겨야 → 동기 최고
+    'pride_factor': +1,        # 강팀 자존심 (빌라가 챔스 확정됐어도 맨시티 이긴 것처럼)
+    'scale': 0.05,             # 지수 → 확률 보정 스케일 (10점 = 5% 변화)
+}
+
+# --------------------------------
+# 오버/언더 자동 전환 설정
+# --------------------------------
+OVER_UNDER_CONFIG = {
+    'confidence_threshold': 0.60,   # 1x2 신뢰도 < 60% → 언오버 전환
+    'group_stage_line': 2.0,        # 조별리그 기준선 (월드컵 평균 2.6골)
+    'knockout_line': 2.5,           # 토너먼트 기준선 (긴장감으로 저득점)
+    'group_over_adjustment': 0.10,  # 조별리그 오버 약간 유리 보정
+}
+
+# --------------------------------
+# 경기내용 피드백 루프 설정
+# --------------------------------
+FEEDBACK_CONFIG = {
+    'xg_luck_threshold': 0.5,    # prev_xg - actual_goals > 0.5 → "운이 없었음"
+    'xg_modifier_up': +0.15,     # 불운 판정 시 다음 경기 xG 상향
+    'xg_modifier_down': -0.10,   # 과대 득점 시 (xG보다 많이 넣음) 하향
+    'max_modifier': 0.30,        # 최대 보정치 (과적합 방지)
+}
+
+# --------------------------------
+# 로테이션 감지 설정
+# --------------------------------
+ROTATION_CONFIG = {
+    'match_day': 3,              # 조별 3차전에서 로테이션 감지
+    'lineup_penalty': -0.15,    # 주전 아낄 때 xG 페널티
+    'confidence_penalty': -0.10, # 1x2 신뢰도 낮춤 (로테이션팀 결과 예측불가)
+    'strong_team_threshold': 20, # FIFA 랭킹 20위 이내 → 로테이션 가능성 있는 팀
 }
 
 # --------------------------------

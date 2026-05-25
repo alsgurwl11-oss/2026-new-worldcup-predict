@@ -375,7 +375,7 @@ def get_confidence_level(uvi):
     if uvi < 0.20:
         return {
             'level':   'HIGH',
-            'label':   '✅ 신뢰도 높음',
+            'label':   'OK 신뢰도 높음',
             'color':   '#00ff88',
             'message': '강팀 승리 가능성 매우 높음',
             'upset_chance': round(uvi * 100, 1),

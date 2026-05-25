@@ -51,6 +51,8 @@ async function predictMatch() {
     document.getElementById('h2h-home').textContent  = data.h2h_home + '%';
     document.getElementById('h2h-away').textContent  = data.h2h_away + '%';
     document.getElementById('result-box').style.display = 'block';
+    // 라인업 자동 로딩
+    loadLineupAfterPredict(home, away);
 }
 
 // --------------------------------
@@ -282,4 +284,421 @@ async function loadBracketPrediction() {
 
     html += '</tbody></table>';
     document.getElementById('bracket-result').innerHTML = html;
+}
+
+// ================================
+// 라인업 UI - main.js 맨 아래에 추가
+// ================================
+
+// 포메이션별 선수 위치 (x%, y% - 피치 기준)
+const FORMATION_POS = {
+    '4-3-3': [
+        {slot:'GK',  x:50, y:88},
+        {slot:'LB',  x:12, y:70}, {slot:'CB', x:35, y:73},
+        {slot:'CB',  x:65, y:73}, {slot:'RB', x:88, y:70},
+        {slot:'CM',  x:20, y:50}, {slot:'CM', x:50, y:48}, {slot:'CM', x:80, y:50},
+        {slot:'LW',  x:12, y:24}, {slot:'ST', x:50, y:16}, {slot:'RW', x:88, y:24},
+    ],
+    '4-2-3-1': [
+        {slot:'GK',  x:50, y:88},
+        {slot:'LB',  x:12, y:72}, {slot:'CB',  x:36, y:75},
+        {slot:'CB',  x:64, y:75}, {slot:'RB',  x:88, y:72},
+        {slot:'CDM', x:35, y:55}, {slot:'CDM', x:65, y:55},
+        {slot:'LM',  x:12, y:35}, {slot:'CAM', x:50, y:35}, {slot:'RM', x:88, y:35},
+        {slot:'ST',  x:50, y:14},
+    ],
+    '4-4-2': [
+        {slot:'GK',  x:50, y:88},
+        {slot:'LB',  x:12, y:72}, {slot:'CB', x:36, y:75},
+        {slot:'CB',  x:64, y:75}, {slot:'RB', x:88, y:72},
+        {slot:'LM',  x:12, y:50}, {slot:'CM', x:36, y:50},
+        {slot:'CM',  x:64, y:50}, {slot:'RM', x:88, y:50},
+        {slot:'ST',  x:35, y:18}, {slot:'ST', x:65, y:18},
+    ],
+    '3-5-2': [
+        {slot:'GK',  x:50, y:88},
+        {slot:'CB',  x:22, y:73}, {slot:'CB', x:50, y:75}, {slot:'CB', x:78, y:73},
+        {slot:'LWB', x:7,  y:52}, {slot:'CM', x:30, y:50},
+        {slot:'CDM', x:50, y:52}, {slot:'CM', x:70, y:50}, {slot:'RWB', x:93, y:52},
+        {slot:'ST',  x:35, y:18}, {slot:'ST', x:65, y:18},
+    ],
+    '5-3-2': [
+        {slot:'GK',  x:50, y:88},
+        {slot:'LWB', x:7,  y:68}, {slot:'CB', x:27, y:75},
+        {slot:'CB',  x:50, y:77}, {slot:'CB', x:73, y:75}, {slot:'RWB', x:93, y:68},
+        {slot:'CM',  x:25, y:48}, {slot:'CM', x:50, y:48}, {slot:'CM', x:75, y:48},
+        {slot:'ST',  x:35, y:18}, {slot:'ST', x:65, y:18},
+    ],
+    '4-1-4-1': [
+        {slot:'GK',  x:50, y:88},
+        {slot:'LB',  x:12, y:72}, {slot:'CB',  x:36, y:75},
+        {slot:'CB',  x:64, y:75}, {slot:'RB',  x:88, y:72},
+        {slot:'CDM', x:50, y:57},
+        {slot:'LM',  x:12, y:38}, {slot:'CM', x:36, y:38},
+        {slot:'CM',  x:64, y:38}, {slot:'RM',  x:88, y:38},
+        {slot:'ST',  x:50, y:14},
+    ],
+};
+
+// 현재 라인업 상태
+let currentLineup = { home: null, away: null };
+
+// --------------------------------
+// 예측 후 라인업 자동 로딩
+// (predictMatch() 마지막에 호출)
+// --------------------------------
+async function loadLineupAfterPredict(home, away) {
+    document.getElementById('lineup-section').style.display = 'block';
+    document.getElementById('lu-home-name').textContent = home;
+    document.getElementById('lu-away-name').textContent = away;
+    document.getElementById('lineup-adj').style.display = 'none';
+
+    // 포메이션 셀렉트 초기화
+    const homeFormSel = document.getElementById('lu-home-form');
+    const awayFormSel = document.getElementById('lu-away-form');
+
+    // 양팀 라인업 API 호출
+    const [homeRes, awayRes] = await Promise.all([
+        fetch(`/api/lineup/${encodeURIComponent(home)}`),
+        fetch(`/api/lineup/${encodeURIComponent(away)}`),
+    ]);
+    currentLineup.home = await homeRes.json();
+    currentLineup.away = await awayRes.json();
+
+    // 기본 포메이션 셀렉트 맞추기
+    homeFormSel.value = currentLineup.home.formation || '4-2-3-1';
+    awayFormSel.value = currentLineup.away.formation || '4-2-3-1';
+
+    renderPitch('home', currentLineup.home);
+    renderPitch('away', currentLineup.away);
+    renderStrength('home', currentLineup.home);
+    renderStrength('away', currentLineup.away);
+}
+
+// --------------------------------
+// 피치 렌더링
+// --------------------------------
+function renderPitch(side, lineup) {
+    const pitchEl = document.getElementById(`pitch-${side}`);
+    const formation = lineup.formation || '4-2-3-1';
+    const positions = FORMATION_POS[formation] || FORMATION_POS['4-2-3-1'];
+    const players   = lineup.players || [];
+
+    // 기존 선수 제거 (SVG 유지)
+    pitchEl.querySelectorAll('.player-dot').forEach(el => el.remove());
+
+    positions.forEach((pos, idx) => {
+        const player = players[idx];
+        if (!player) return;
+
+        const dot = document.createElement('div');
+        dot.className = 'player-dot';
+        dot.style.left = pos.x + '%';
+        dot.style.top  = pos.y + '%';
+
+        const ovr = player.overall || 70;
+        const ovrColor = ovr >= 85 ? '#ffbb44' : ovr >= 80 ? '#00ff88' : ovr >= 75 ? '#4a4aff' : '#aaa';
+        const shortName = (player.name || '').split(' ').pop() || player.name || '';
+
+        dot.innerHTML = `
+            <div class="player-circle" style="border-color:${ovrColor};">
+                <span style="color:${ovrColor};font-size:0.8em;">${ovr}</span>
+            </div>
+            <div class="player-name">${shortName}</div>`;
+
+        dot.title = `${player.name} (OVR ${ovr}) | ${pos.slot}`;
+        pitchEl.appendChild(dot);
+    });
+}
+
+// --------------------------------
+// 강도 카드 렌더링
+// --------------------------------
+function renderStrength(side, lineup) {
+    const el = document.getElementById(`lu-${side}-strength`);
+    const atk = Math.round((lineup.attack_str  || 0) * 100);
+    const mid = Math.round((lineup.mid_str     || 0) * 100);
+    const def = Math.round((lineup.defense_str || 0) * 100);
+    const avg = lineup.avg_overall || 70;
+
+    el.innerHTML = `
+        <div class="str-card">
+            <div class="str-label">⚔️ 공격</div>
+            <div class="str-val">${atk}</div>
+        </div>
+        <div class="str-card">
+            <div class="str-label">🔄 미드필드</div>
+            <div class="str-val">${mid}</div>
+        </div>
+        <div class="str-card">
+            <div class="str-label">🛡️ 수비</div>
+            <div class="str-val">${def}</div>
+        </div>
+        <div style="grid-column:1/-1;text-align:center;color:#aaa;font-size:0.8em;margin-top:4px;">
+            평균 오버롤: <strong style="color:#fff;">${avg}</strong>
+        </div>`;
+}
+
+// --------------------------------
+// 포메이션 변경 시 재구성
+// --------------------------------
+async function changeFormation(side) {
+    const formation = document.getElementById(`lu-${side}-form`).value;
+    const teamName  = document.getElementById(`lu-${side}-name`).textContent;
+    if (!teamName) return;
+
+    const res  = await fetch(`/api/lineup/${encodeURIComponent(teamName)}?formation=${formation}`);
+    const data = await res.json();
+    currentLineup[side] = data;
+
+    renderPitch(side, data);
+    renderStrength(side, data);
+}
+
+// --------------------------------
+// 라인업 적용 재예측
+// --------------------------------
+async function predictWithLineup() {
+    const home = document.getElementById('lu-home-name').textContent;
+    const away = document.getElementById('lu-away-name').textContent;
+    if (!home || !away) return;
+
+    const homeForm = document.getElementById('lu-home-form').value;
+    const awayForm = document.getElementById('lu-away-form').value;
+
+    const res = await fetch('/api/predict_with_lineup', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            home, away,
+            home_formation: homeForm,
+            away_formation: awayForm,
+            home_players: null,
+            away_players: null,
+        })
+    });
+    const data = await res.json();
+
+    // 확률 바 업데이트
+    setTimeout(() => {
+        document.getElementById('bar-home').style.width = data.home_win + '%';
+        document.getElementById('bar-home').textContent = data.home_win + '%';
+        document.getElementById('bar-draw').style.width = data.draw + '%';
+        document.getElementById('bar-draw').textContent = data.draw + '%';
+        document.getElementById('bar-away').style.width = data.away_win + '%';
+        document.getElementById('bar-away').textContent = data.away_win + '%';
+    }, 100);
+
+    // 보정 정보 표시
+    const adj  = data.adjustment || {};
+    const sign  = adj.total_home_adj >= 0 ? '+' : '';
+    const color = adj.total_home_adj >= 0 ? '#00ff88' : '#ff7777';
+    const formBonus = adj.formation_bonus || 0;
+    const formText = formBonus > 0
+        ? `${homeForm} → ${awayForm} 상성: 홈팀 유리 (참고용)`
+        : formBonus < 0
+        ? `${homeForm} → ${awayForm} 상성: 원정팀 유리 (참고용)`
+        : '포메이션 상성: 중립';
+
+    document.getElementById('lineup-adj').style.display = 'block';
+    document.getElementById('lineup-adj').innerHTML = `
+        <h4 style="margin-bottom:10px;color:#4aff4a;">📊 라인업 보정 결과</h4>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;font-size:0.85em;">
+            <div style="text-align:center;">
+                <div style="color:#aaa;margin-bottom:3px;">라인업 강도 보정</div>
+                <div style="color:${color};font-weight:bold;font-size:1.1em;">${sign}${adj.home_boost || 0}%p</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="color:#aaa;margin-bottom:3px;">총 보정값</div>
+                <div style="color:${color};font-weight:bold;font-size:1.3em;">${sign}${adj.total_home_adj || 0}%p</div>
+            </div>
+            <div style="text-align:center;">
+                <div style="color:#aaa;margin-bottom:3px;">공격/수비 보정</div>
+                <div style="color:${color};font-weight:bold;font-size:1.1em;">${sign}${adj.att_bonus || 0}%p</div>
+            </div>
+        </div>
+        <div style="margin-top:10px;padding:8px;background:#0d0d0d;border-radius:6px;font-size:0.8em;color:#888;">
+            ⚠️ ${formText}
+        </div>`;
+
+    document.getElementById('result-box').style.display = 'block';
+}
+// ================================
+// 베팅픽 최적조합 - main.js 맨 아래에 추가
+// ================================
+
+let currentRound  = null;
+let currentFolder = 5;
+let currentUvi    = 100;
+
+function selectRound(round, btn) {
+    currentRound = round;
+    loadBettingCombo();
+}
+
+function setFolder(n, btn) {
+    currentFolder = n;
+    document.querySelectorAll('.folder-btn').forEach(b => {
+        b.style.background = '#2d2d4e';
+        b.style.color = '#fff';
+    });
+    btn.style.background = '#4a4aff';
+    if (currentRound) loadBettingCombo();
+}
+
+function setUvi(limit, btn) {
+    currentUvi = limit;
+    document.querySelectorAll('.uvi-btn').forEach(b => {
+        b.style.background = '#2d2d4e';
+        b.style.color = '#fff';
+        b.style.borderColor = '#4aff4a';
+    });
+    btn.style.background = '#4aff4a';
+    btn.style.color = '#000';
+    if (currentRound) loadBettingCombo();
+}
+
+async function loadBettingCombo() {
+    if (!currentRound) return;
+
+    document.getElementById('betting-result').innerHTML =
+        `<div class="loading"><div class="spinner"></div>
+         <p>${currentRound}라운드 ${currentFolder}폴더 최적 조합 계산 중...</p></div>`;
+
+    const url = `/api/best_combo/${currentRound}?n=${currentFolder}&uvi_limit=${currentUvi}&min_conf=0`;
+    const res  = await fetch(url);
+    const data = await res.json();
+
+    if (data.error) {
+        document.getElementById('betting-result').innerHTML =
+            `<div class="card" style="text-align:center;color:#ff7777;">
+                <p style="font-size:1.1em;margin-bottom:8px;">⚠️ ${data.error}</p>
+                <p style="color:#aaa;font-size:0.85em;">UVI 상한을 높이거나 폴더 수를 줄여보세요</p>
+             </div>`;
+        return;
+    }
+
+    const medals = ['🥇','🥈','🥉','4위','5위'];
+    let html = `
+    <div style="margin-bottom:12px;padding:10px 15px;background:#0d0d2e;border-radius:8px;
+                display:flex;align-items:center;gap:15px;flex-wrap:wrap;font-size:0.85em;">
+        <span style="color:#aaa;">📊 ${currentRound}라운드 · ${currentFolder}폴더 · UVI ${currentUvi === 100 ? '전체' : currentUvi+'% 이하'}</span>
+        <span style="color:#4aff4a;">C(24,${currentFolder}) = ${combo(24,currentFolder).toLocaleString()}가지 중 TOP5</span>
+    </div>`;
+
+    data.forEach((item, idx) => {
+        const prob  = item.combo_prob;
+        const color = prob >= 30 ? '#00ff88' : prob >= 20 ? '#ffbb44' : '#ff7777';
+        const grade = prob >= 30 ? '✅ 안정' : prob >= 20 ? '⚠️ 보통' : '❌ 위험';
+
+        html += `
+        <div class="card" style="margin-bottom:15px;border:1px solid ${color}33;">
+
+            <!-- 조합 헤더 -->
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:1.4em;">${medals[idx]}</span>
+                    <div>
+                        <div style="font-size:0.85em;color:#aaa;">${currentFolder}폴더 조합 ${idx+1}위</div>
+                        <div style="font-size:0.8em;color:#555;margin-top:2px;">경기 모두 적중 시</div>
+                    </div>
+                </div>
+                <div style="text-align:right;">
+                    <div style="font-size:2em;font-weight:bold;color:${color};">${prob}%</div>
+                    <div style="font-size:0.8em;color:${color};">${grade}</div>
+                </div>
+            </div>
+
+            <!-- 확률 바 -->
+            <div style="background:#1a1a3e;border-radius:6px;height:8px;margin-bottom:15px;overflow:hidden;">
+                <div style="width:${Math.min(prob*2,100)}%;height:100%;
+                            background:linear-gradient(90deg,${color},${color}88);border-radius:6px;"></div>
+            </div>
+
+            <!-- 경기 리스트 -->
+            ${item.matches.map((m, mi) => `
+            <div style="display:flex;align-items:center;gap:12px;padding:10px;
+                        background:#0d0d2e;border-radius:8px;margin-bottom:8px;flex-wrap:wrap;">
+                <span style="color:#4a4aff;font-weight:bold;min-width:20px;">${mi+1}</span>
+                <div style="flex:1;min-width:150px;">
+                    <div style="font-size:0.9em;font-weight:bold;">
+                        ${m.home} <span style="color:#555;">vs</span> ${m.away}
+                    </div>
+                    <div style="color:#aaa;font-size:0.75em;margin-top:2px;">${m.group}조 · ${m.date}</div>
+                </div>
+                <div style="background:#1a1a3e;border-radius:6px;padding:5px 12px;text-align:center;">
+                    <div style="font-size:0.75em;color:#aaa;margin-bottom:2px;">추천</div>
+                    <div style="font-weight:bold;font-size:0.9em;color:#fff;">${m.pick_label}</div>
+                </div>
+                <div style="text-align:center;min-width:55px;">
+                    <div style="font-size:0.7em;color:#aaa;">신뢰도</div>
+                    <div style="font-weight:bold;color:${m.confidence>=65?'#00ff88':m.confidence>=55?'#ffbb44':'#aaa'};">
+                        ${m.confidence}%
+                    </div>
+                </div>
+                <div style="text-align:center;min-width:55px;">
+                    <div style="font-size:0.7em;color:#aaa;">이변지수</div>
+                    <div style="font-weight:bold;color:${m.uvi>=50?'#ff4444':m.uvi>=35?'#ffbb44':'#00ff88'};">
+                        ${m.uvi}%
+                    </div>
+                </div>
+            </div>`).join('')}
+
+        </div>`;
+    });
+
+    // 전체 경기 요약 (접기/펼치기)
+    html += await getBettingPicksSummary(currentRound);
+
+    document.getElementById('betting-result').innerHTML = html;
+}
+
+// 조합 수 계산 C(n,k)
+function combo(n, k) {
+    if (k > n) return 0;
+    let r = 1;
+    for (let i = 0; i < k; i++) r = r * (n - i) / (i + 1);
+    return Math.round(r);
+}
+
+// 전체 경기 리스트 (참고용)
+async function getBettingPicksSummary(round) {
+    const res  = await fetch(`/api/betting_picks/${round}`);
+    const data = await res.json();
+
+    const rec   = data.filter(m => m.recommended);
+    const risky = data.filter(m => !m.recommended && m.uvi >= 35);
+
+    let html = `
+    <div class="card" style="border:1px solid #333;margin-top:10px;">
+        <h3 style="margin-bottom:15px;color:#aaa;font-size:1em;">📋 전체 경기 요약</h3>`;
+
+    if (rec.length > 0) {
+        html += `<div style="margin-bottom:12px;">
+            <div style="color:#4aff4a;font-size:0.85em;margin-bottom:8px;">⭐ 추천 (${rec.length}경기)</div>`;
+        rec.forEach(m => {
+            html += `<div style="display:flex;justify-content:space-between;padding:6px 0;
+                                 border-bottom:1px solid #1a1a3e;font-size:0.85em;">
+                <span>${m.home} vs ${m.away}</span>
+                <span style="color:#4aff4a;font-weight:bold;">${m.pick_label} ${m.confidence}%</span>
+            </div>`;
+        });
+        html += '</div>';
+    }
+
+    if (risky.length > 0) {
+        html += `<div>
+            <div style="color:#ff7777;font-size:0.85em;margin-bottom:8px;">⚡ 이변주의 (${risky.length}경기)</div>`;
+        risky.forEach(m => {
+            html += `<div style="display:flex;justify-content:space-between;padding:6px 0;
+                                 border-bottom:1px solid #1a1a3e;font-size:0.85em;color:#aaa;">
+                <span>${m.home} vs ${m.away}</span>
+                <span>UVI ${m.uvi}%</span>
+            </div>`;
+        });
+        html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
 }

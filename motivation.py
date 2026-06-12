@@ -318,10 +318,32 @@ def apply_all_adjustments(home: str, away: str,
         modifier = calculate_xg_feedback_modifier(away_prev_xg, away_prev_actual)
         adj_away_xg = apply_xg_feedback(adj_away_xg, modifier)
 
-    # --- D. 언오버 자동 전환 판단 ---
+    # --- D. 언오버 자동 전환 판단 (A+B 복합) ---
     confidence_1x2 = get_1x2_confidence(adj_home, adj_draw, adj_away)
     cfg = OVER_UNDER_CONFIG
+
+    # 기본: 신뢰도 기반 전환
     auto_switch = confidence_1x2 < cfg['confidence_threshold']
+    switch_reason = '저신뢰도' if auto_switch else ''
+
+    # A안: UVI 기반 강제 전환
+    # 이변지수 높은 경기는 고신뢰도여도 위험 → 언오버로 대피
+    uvi_score = match_context.get('uvi', 0.0)  # 0~1 범위
+    if not auto_switch and uvi_score >= cfg['uvi_force_ou_threshold']:
+        auto_switch  = True
+        switch_reason = f'UVI강제({uvi_score:.2f})'
+
+    # B안: 배당-모델 괴리 기반 전환
+    # 모델은 A승 80% 주는데 배당은 A에 1.5 (implied 60%) → 괴리 20%p
+    # 시장이 모델보다 팽팽하게 본다는 신호 → 언오버 대피
+    if not auto_switch:
+        best_prob   = confidence_1x2 * 100                    # 모델 최고 확률 (%)
+        bet_implied = match_context.get('bet_implied', None)   # 배당 implied 확률 (%)
+        if bet_implied is not None:
+            gap = best_prob - bet_implied
+            if gap >= cfg['odds_model_gap_threshold']:
+                auto_switch   = True
+                switch_reason = f'배당괴리({gap:.1f}%p)'
 
     ou_result = get_over_under_recommendation(
         adj_home_xg, adj_away_xg,
@@ -341,6 +363,7 @@ def apply_all_adjustments(home: str, away: str,
 
         # 언오버 자동 전환 여부
         'auto_switch_ou':  auto_switch,
+        'switch_reason':   switch_reason,   # '저신뢰도' / 'UVI강제' / '배당괴리'
         'confidence_1x2':  round(confidence_1x2, 3),
         'over_under':      ou_result,
 

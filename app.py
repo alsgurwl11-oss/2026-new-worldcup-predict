@@ -446,8 +446,8 @@ def bracket_prediction():
 # ================================
 @app.route('/api/betting_picks/<int:round_num>', methods=['GET'])
 def betting_picks(round_num):
-    from config import WC2026_SCHEDULE, OVER_UNDER_CONFIG
-    from predict import get_betting_strength, predict_scoreline
+    from config import WC2026_SCHEDULE, OVER_UNDER_CONFIG, MATCH_ODDS_1X2
+    from predict import get_betting_strength, predict_scoreline, decimal_to_prob
     from upset_model import calculate_uvi
     from motivation import get_1x2_confidence, get_over_under_recommendation
 
@@ -493,31 +493,80 @@ def betting_picks(round_num):
         edge = round(probs[best_outcome] - bet_implied, 1)
 
         # --------------------------------
-        # PL 교훈: 1x2 신뢰도 < 60% → 언오버 자동 전환
+        # 언오버 자동 전환: A(저신뢰도) + B(UVI) + C(배당괴리) 복합
         # --------------------------------
         auto_switched = False
+        switch_reason = ''
+        switch_by     = ''   # 전환 방법 추적 (recommended 조건 분기용)
         ou_data       = None
-        pick_type     = '1x2'   # '1x2' or 'over_under'
+        pick_type     = '1x2'
 
+        # A안: 저신뢰도 (1x2 신뢰도 65% 미만)
         if confidence_1x2 < OU_THRESHOLD:
-            # xG 기반 오버언더 계산
+            auto_switched = True
+            switch_reason = '저신뢰도'
+            switch_by     = 'A'
+
+        # B안: UVI 강제 전환 (고신뢰도여도 이변지수 높으면 대피)
+        # 2022: 아르헨티나77%-사우디, 프랑스76%-튀니지 등 못 잡은 케이스
+        if not auto_switched and uvi >= OVER_UNDER_CONFIG['uvi_force_ou_threshold']:
+            auto_switched = True
+            switch_reason = f'UVI강제({uvi*100:.0f}%)'
+            switch_by     = 'B'
+
+        # C안: 실제 배당 vs 모델 괴리 (시장이 더 팽팽하게 본다는 신호)
+        # bet_implied를 실제 1x2 배당 기준으로 재계산
+        if not auto_switched:
+            real_implied = None
+            mk  = (home, away)
+            rmk = (away, home)
+            if mk in MATCH_ODDS_1X2:
+                rh, rd, ra = MATCH_ODDS_1X2[mk]
+                ph, pd, pa = 1/rh, 1/rd, 1/ra
+                t = ph + pd + pa
+                if best_outcome == 'home_win': real_implied = ph/t*100
+                elif best_outcome == 'away_win': real_implied = pa/t*100
+                else: real_implied = pd/t*100
+            elif rmk in MATCH_ODDS_1X2:
+                ra, rd, rh = MATCH_ODDS_1X2[rmk]
+                ph, pd, pa = 1/rh, 1/rd, 1/ra
+                t = ph + pd + pa
+                if best_outcome == 'home_win': real_implied = ph/t*100
+                elif best_outcome == 'away_win': real_implied = pa/t*100
+                else: real_implied = pd/t*100
+
+            if real_implied is not None:
+                gap = probs[best_outcome] - real_implied
+                if gap >= OVER_UNDER_CONFIG['odds_model_gap_threshold']:
+                    auto_switched = True
+                    switch_reason = f'배당괴리({gap:.1f}%p)'
+                    switch_by     = 'C'
+
+        # 언오버 계산
+        if auto_switched:
             try:
                 scoreline = predict_scoreline(home, away, team_cache, round_name='Group')
                 ou_data   = get_over_under_recommendation(
                     scoreline['home_xg'], scoreline['away_xg'], 'Group'
                 )
-                auto_switched = True
-                pick_type     = 'over_under'
-            except:
-                pass
+                pick_type = 'over_under'
+                ou_data['ou_odds'] = scoreline.get('ou_odds')  
+            except Exception as e:
+                print(f"OU 에러 [{home} vs {away}]: {e}")  
+                auto_switched = False
+                switch_reason = ''
+                switch_by     = ''
 
-        # 픽 라벨 결정
+        # 픽 라벨 + 추천 여부 결정
         if auto_switched and ou_data:
-            ou_rec   = ou_data['recommendation']           # 'OVER' or 'UNDER'
-            ou_line  = ou_data['line']
-            label    = f"{'오버' if ou_rec == 'OVER' else '언더'} {ou_line}"
-            ou_conf  = ou_data['confidence']
-            recommended = ou_conf >= 60 and uvi < 0.45    # 언오버는 UVI 기준 완화
+            ou_rec  = ou_data['recommendation']
+            ou_line = ou_data['line']
+            label   = f"{'오버' if ou_rec == 'OVER' else '언더'} {ou_line}"
+            ou_conf = ou_data['confidence']
+            # 전환 방법별 추천 기준 분리
+            # B(UVI강제): uvi 체크 제거 → ou_conf만 봄 (UVI 높아서 전환한 건데 uvi<0.45 요구하면 모순)
+            # A/C: ou_conf 기준만
+            recommended = ou_conf >= 55
         else:
             if best_outcome == 'home_win': label = f"{home} 승"
             elif best_outcome == 'away_win': label = f"{away} 승"
@@ -534,13 +583,14 @@ def betting_picks(round_num):
             'draw':           pred['draw'],
             'away_win':       pred['away_win'],
             'best_outcome':   best_outcome,
-            'confidence':     round(probs[best_outcome], 1),
+            'confidence':     round(ou_conf if (auto_switched and ou_conf) else probs[best_outcome], 1),
             'uvi':            round(uvi * 100, 1),
             'edge':           edge,
             'bet_implied':    bet_implied,
             'pick_label':     label,
             'pick_type':      pick_type,        # 1x2 or over_under
             'auto_switched':  auto_switched,    # 언오버 자동전환 여부
+            'switch_reason':  switch_reason,    # 전환 이유
             'ou_data':        ou_data,          # 언오버 상세 데이터
             'recommended':    recommended,
         })

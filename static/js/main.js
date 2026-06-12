@@ -18,6 +18,106 @@ function probClass(val) {
 }
 
 // --------------------------------
+// 배당 표시 헬퍼 (1번 요구사항)
+// odds = {home, draw, away} 또는 null
+// --------------------------------
+function renderOddsRow(odds, homeName, awayName) {
+    if (!odds) return '';
+    return `
+        <div style="display:flex;justify-content:center;gap:12px;margin-top:8px;font-size:0.78em;color:#aaa;">
+            <span style="background:#1a1a3e;border-radius:4px;padding:2px 8px;">
+                ${homeName} <strong style="color:#fff;">${odds.home}</strong>
+            </span>
+            <span style="background:#1a1a3e;border-radius:4px;padding:2px 8px;">
+                무 <strong style="color:#ffbb44;">${odds.draw}</strong>
+            </span>
+            <span style="background:#1a1a3e;border-radius:4px;padding:2px 8px;">
+                ${awayName} <strong style="color:#fff;">${odds.away}</strong>
+            </span>
+        </div>`;
+}
+
+// 저배당 뱃지 (3번 요구사항)
+function renderLowOddsBadge(isLowOdds, overUnder) {
+    if (!isLowOdds) return '';
+    const ou = overUnder ? `${overUnder.pick} ${overUnder.line} (${overUnder.prob}%)` : 'O/U 분석 권장';
+    return `
+        <div style="text-align:center;margin-top:6px;">
+            <span style="background:#ff9900;color:#000;border-radius:4px;
+                         padding:3px 8px;font-size:0.75em;font-weight:bold;">
+                ⚠️ 초저배당 — ${ou}
+            </span>
+        </div>`;
+}
+
+// --------------------------------
+// 2번: 배당 계산기 전역 상태
+// --------------------------------
+let calcSelections = {}; // { 'home_vs_away': { label, odds } }
+
+function toggleCalcPick(key, label, oddsVal, btn) {
+    if (calcSelections[key]) {
+        delete calcSelections[key];
+        btn.style.background = '#1a1a3e';
+        btn.style.borderColor = '#333';
+    } else {
+        calcSelections[key] = { label, odds: oddsVal };
+        btn.style.background = '#4a4aff';
+        btn.style.borderColor = '#7a7aff';
+    }
+    updateOddsCalculator();
+    addToCart(key, label, oddsVal);
+}
+
+function updateOddsCalculator() {
+    const keys = Object.keys(calcSelections);
+    const box  = document.getElementById('odds-calc-box');
+    if (!box) return;
+
+    if (keys.length === 0) {
+        box.innerHTML = `<div style="color:#555;font-size:0.85em;text-align:center;padding:10px;">경기를 선택하면 배당이 계산됩니다</div>`;
+        return;
+    }
+
+    let totalOdds = 1;
+    let html = '<div style="font-size:0.82em;margin-bottom:8px;">';
+    keys.forEach(k => {
+        const s = calcSelections[k];
+        totalOdds *= s.odds;
+        html += `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #1a1a3e;">
+            <span style="color:#aaa;">${k}</span>
+            <span style="color:#fff;">${s.label} <strong style="color:#4aff4a;">x${s.odds}</strong></span>
+        </div>`;
+    });
+    html += '</div>';
+
+    const color = totalOdds >= 3 ? '#00ff88' : totalOdds >= 2 ? '#ffbb44' : '#aaa';
+    html += `
+        <div style="background:#0d0d0d;border-radius:6px;padding:10px;text-align:center;margin-top:6px;">
+            <div style="color:#aaa;font-size:0.75em;margin-bottom:4px;">${keys.length}폴더 예상 배당</div>
+            <div style="font-size:1.8em;font-weight:bold;color:${color};">x${totalOdds.toFixed(2)}</div>
+            <div style="color:#555;font-size:0.75em;margin-top:4px;">
+                10,000원 베팅 시 → <strong style="color:${color};">${Math.round(totalOdds * 10000).toLocaleString()}원</strong>
+            </div>
+        </div>
+        <button onclick="clearCalc()" style="width:100%;margin-top:8px;padding:6px;
+            background:#2a2a4e;border:none;border-radius:6px;color:#aaa;cursor:pointer;font-size:0.8em;">
+            선택 초기화
+        </button>`;
+
+    box.innerHTML = html;
+}
+
+function clearCalc() {
+    calcSelections = {};
+    document.querySelectorAll('.odds-pick-btn').forEach(b => {
+        b.style.background = '#1a1a3e';
+        b.style.borderColor = '#333';
+    });
+    updateOddsCalculator();
+}
+
+// --------------------------------
 // ① 경기 예측
 // --------------------------------
 async function predictMatch() {
@@ -50,8 +150,22 @@ async function predictMatch() {
     document.getElementById('away-rank').textContent = data.away_rank + '위';
     document.getElementById('h2h-home').textContent  = data.h2h_home + '%';
     document.getElementById('h2h-away').textContent  = data.h2h_away + '%';
+
+    const oddsArea = document.getElementById('predict-odds-area');
+    if (oddsArea) {
+        if (data.odds) {
+            oddsArea.innerHTML = renderOddsRow(data.odds, data.home, data.away);
+        } else {
+            oddsArea.innerHTML = '';
+        }
+    }
+
+    const lowBadge = document.getElementById('predict-low-odds-badge');
+    if (lowBadge) {
+        lowBadge.innerHTML = renderLowOddsBadge(data.is_low_odds, data.over_under);
+    }
+
     document.getElementById('result-box').style.display = 'block';
-    // 라인업 자동 로딩
     loadLineupAfterPredict(home, away);
 }
 
@@ -122,13 +236,49 @@ async function loadGroupMatches(group, btn) {
     });
     const data = await res.json();
 
-    let html = `<h3 style="margin-bottom:15px;">${group}조 경기별 예측</h3>`;
+    let html = `
+        <h3 style="margin-bottom:15px;">${group}조 경기별 예측</h3>
+        <div style="background:#0d0d2e;border:1px solid #4a4aff;border-radius:10px;padding:14px;margin-bottom:18px;">
+            <div style="font-size:0.85em;color:#4aff4a;font-weight:bold;margin-bottom:8px;">🧮 배당 계산기 — 클릭해서 경기 선택</div>
+            <div id="odds-calc-box">
+                <div style="color:#555;font-size:0.85em;text-align:center;padding:10px;">경기를 선택하면 배당이 계산됩니다</div>
+            </div>
+        </div>`;
 
     data.matches.forEach((match, idx) => {
         const homeClass = match.home_win >= match.away_win ? 'prob-high' : 'prob-low';
         const awayClass = match.away_win > match.home_win  ? 'prob-high' : 'prob-low';
+        const odds      = match.odds;
+        const matchKey  = `${match.home} vs ${match.away}`;
+
+        let oddsPickHtml = '';
+        if (odds) {
+            oddsPickHtml = `
+                <div style="display:flex;justify-content:center;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                    <button class="odds-pick-btn"
+                        onclick="toggleCalcPick('${matchKey}','${match.home} 승(x${odds.home})',${odds.home},this)"
+                        style="padding:4px 10px;background:#1a1a3e;border:1px solid #333;
+                               border-radius:6px;color:#fff;cursor:pointer;font-size:0.78em;">
+                        ${match.home} 승 <strong>x${odds.home}</strong>
+                    </button>
+                    <button class="odds-pick-btn"
+                        onclick="toggleCalcPick('${matchKey}','무승부(x${odds.draw})',${odds.draw},this)"
+                        style="padding:4px 10px;background:#1a1a3e;border:1px solid #333;
+                               border-radius:6px;color:#ffbb44;cursor:pointer;font-size:0.78em;">
+                        무 <strong>x${odds.draw}</strong>
+                    </button>
+                    <button class="odds-pick-btn"
+                        onclick="toggleCalcPick('${matchKey}','${match.away} 승(x${odds.away})',${odds.away},this)"
+                        style="padding:4px 10px;background:#1a1a3e;border:1px solid #333;
+                               border-radius:6px;color:#fff;cursor:pointer;font-size:0.78em;">
+                        ${match.away} 승 <strong>x${odds.away}</strong>
+                    </button>
+                </div>`;
+        }
+
         html += `
-            <div style="background:#0d0d2e; border-radius:12px; padding:20px; margin-bottom:15px; border:1px solid #333;">
+            <div style="background:#0d0d2e; border-radius:12px; padding:20px; margin-bottom:15px;
+                        border:1px solid ${match.is_low_odds ? '#ff9900' : '#333'};">
                 <div style="text-align:center; margin-bottom:15px; color:#aaa; font-size:0.85em;">경기 ${idx+1}</div>
                 <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:15px;">
                     <div style="text-align:center; flex:1;">
@@ -141,7 +291,9 @@ async function loadGroupMatches(group, btn) {
                         <div style="color:#aaa; font-size:0.8em;">FIFA ${match.away_rank}위</div>
                     </div>
                 </div>
-                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center;">
+                ${renderOddsRow(odds, match.home, match.away)}
+                ${renderLowOddsBadge(match.is_low_odds, null)}
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; text-align:center; margin-top:12px;">
                     <div style="background:#1a1a3e; border-radius:8px; padding:12px;">
                         <div style="color:#aaa; font-size:0.75em; margin-bottom:5px;">홈팀 승</div>
                         <div class="${homeClass}" style="font-size:1.3em;">${match.home_win}%</div>
@@ -155,6 +307,7 @@ async function loadGroupMatches(group, btn) {
                         <div class="${awayClass}" style="font-size:1.3em;">${match.away_win}%</div>
                     </div>
                 </div>
+                ${oddsPickHtml}
             </div>`;
     });
 
@@ -245,7 +398,7 @@ async function simulateTournament() {
 }
 
 // --------------------------------
-// ⑤ 토너먼트 브라켓 (구버전 탭용)
+// ⑤ 토너먼트 브라켓
 // --------------------------------
 async function loadBracketPrediction() {
     document.getElementById('bracket-result').innerHTML = `
@@ -287,10 +440,9 @@ async function loadBracketPrediction() {
 }
 
 // ================================
-// 라인업 UI - main.js 맨 아래에 추가
+// 라인업 UI
 // ================================
 
-// 포메이션별 선수 위치 (x%, y% - 피치 기준)
 const FORMATION_POS = {
     '4-3-3': [
         {slot:'GK',  x:50, y:88},
@@ -340,24 +492,17 @@ const FORMATION_POS = {
     ],
 };
 
-// 현재 라인업 상태
 let currentLineup = { home: null, away: null };
 
-// --------------------------------
-// 예측 후 라인업 자동 로딩
-// (predictMatch() 마지막에 호출)
-// --------------------------------
 async function loadLineupAfterPredict(home, away) {
     document.getElementById('lineup-section').style.display = 'block';
     document.getElementById('lu-home-name').textContent = home;
     document.getElementById('lu-away-name').textContent = away;
     document.getElementById('lineup-adj').style.display = 'none';
 
-    // 포메이션 셀렉트 초기화
     const homeFormSel = document.getElementById('lu-home-form');
     const awayFormSel = document.getElementById('lu-away-form');
 
-    // 양팀 라인업 API 호출
     const [homeRes, awayRes] = await Promise.all([
         fetch(`/api/lineup/${encodeURIComponent(home)}`),
         fetch(`/api/lineup/${encodeURIComponent(away)}`),
@@ -365,7 +510,6 @@ async function loadLineupAfterPredict(home, away) {
     currentLineup.home = await homeRes.json();
     currentLineup.away = await awayRes.json();
 
-    // 기본 포메이션 셀렉트 맞추기
     homeFormSel.value = currentLineup.home.formation || '4-2-3-1';
     awayFormSel.value = currentLineup.away.formation || '4-2-3-1';
 
@@ -375,16 +519,12 @@ async function loadLineupAfterPredict(home, away) {
     renderStrength('away', currentLineup.away);
 }
 
-// --------------------------------
-// 피치 렌더링
-// --------------------------------
 function renderPitch(side, lineup) {
     const pitchEl = document.getElementById(`pitch-${side}`);
     const formation = lineup.formation || '4-2-3-1';
     const positions = FORMATION_POS[formation] || FORMATION_POS['4-2-3-1'];
     const players   = lineup.players || [];
 
-    // 기존 선수 제거 (SVG 유지)
     pitchEl.querySelectorAll('.player-dot').forEach(el => el.remove());
 
     positions.forEach((pos, idx) => {
@@ -411,9 +551,6 @@ function renderPitch(side, lineup) {
     });
 }
 
-// --------------------------------
-// 강도 카드 렌더링
-// --------------------------------
 function renderStrength(side, lineup) {
     const el = document.getElementById(`lu-${side}-strength`);
     const atk = Math.round((lineup.attack_str  || 0) * 100);
@@ -439,9 +576,6 @@ function renderStrength(side, lineup) {
         </div>`;
 }
 
-// --------------------------------
-// 포메이션 변경 시 재구성
-// --------------------------------
 async function changeFormation(side) {
     const formation = document.getElementById(`lu-${side}-form`).value;
     const teamName  = document.getElementById(`lu-${side}-name`).textContent;
@@ -455,9 +589,6 @@ async function changeFormation(side) {
     renderStrength(side, data);
 }
 
-// --------------------------------
-// 라인업 적용 재예측
-// --------------------------------
 async function predictWithLineup() {
     const home = document.getElementById('lu-home-name').textContent;
     const away = document.getElementById('lu-away-name').textContent;
@@ -479,7 +610,6 @@ async function predictWithLineup() {
     });
     const data = await res.json();
 
-    // 확률 바 업데이트
     setTimeout(() => {
         document.getElementById('bar-home').style.width = data.home_win + '%';
         document.getElementById('bar-home').textContent = data.home_win + '%';
@@ -489,7 +619,6 @@ async function predictWithLineup() {
         document.getElementById('bar-away').textContent = data.away_win + '%';
     }, 100);
 
-    // 보정 정보 표시
     const adj  = data.adjustment || {};
     const sign  = adj.total_home_adj >= 0 ? '+' : '';
     const color = adj.total_home_adj >= 0 ? '#00ff88' : '#ff7777';
@@ -523,8 +652,9 @@ async function predictWithLineup() {
 
     document.getElementById('result-box').style.display = 'block';
 }
+
 // ================================
-// 베팅픽 최적조합 - main.js 맨 아래에 추가
+// 베팅픽 최적조합
 // ================================
 
 let currentRound  = null;
@@ -594,8 +724,6 @@ async function loadBettingCombo() {
 
         html += `
         <div class="card" style="margin-bottom:15px;border:1px solid ${color}33;">
-
-            <!-- 조합 헤더 -->
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;flex-wrap:wrap;gap:10px;">
                 <div style="display:flex;align-items:center;gap:10px;">
                     <span style="font-size:1.4em;">${medals[idx]}</span>
@@ -609,23 +737,31 @@ async function loadBettingCombo() {
                     <div style="font-size:0.8em;color:${color};">${grade}</div>
                 </div>
             </div>
-
-            <!-- 확률 바 -->
             <div style="background:#1a1a3e;border-radius:6px;height:8px;margin-bottom:15px;overflow:hidden;">
                 <div style="width:${Math.min(prob*2,100)}%;height:100%;
                             background:linear-gradient(90deg,${color},${color}88);border-radius:6px;"></div>
             </div>
-
-            <!-- 경기 리스트 -->
-            ${item.matches.map((m, mi) => `
+            ${item.matches.map((m, mi) => {
+                const borderColor = m.is_low_odds ? '#ff9900' : '#1a1a3e';
+                const oddsHtml = m.odds
+                    ? `<div style="font-size:0.7em;color:#aaa;margin-top:3px;">
+                           배당 <span style="color:#fff;">x${m.odds.home || '-'}</span> /
+                           <span style="color:#ffbb44;">무 x${m.odds.draw || '-'}</span> /
+                           <span style="color:#fff;">x${m.odds.away || '-'}</span>
+                       </div>`
+                    : '';
+                return `
             <div style="display:flex;align-items:center;gap:12px;padding:10px;
-                        background:#0d0d2e;border-radius:8px;margin-bottom:8px;flex-wrap:wrap;">
+                        background:#0d0d2e;border-radius:8px;margin-bottom:8px;
+                        border:1px solid ${borderColor};flex-wrap:wrap;">
                 <span style="color:#4a4aff;font-weight:bold;min-width:20px;">${mi+1}</span>
                 <div style="flex:1;min-width:150px;">
                     <div style="font-size:0.9em;font-weight:bold;">
                         ${m.home} <span style="color:#555;">vs</span> ${m.away}
                     </div>
                     <div style="color:#aaa;font-size:0.75em;margin-top:2px;">${m.group}조 · ${m.date}</div>
+                    ${oddsHtml}
+                    ${m.is_low_odds ? '<div style="font-size:0.7em;color:#ff9900;margin-top:2px;">⚠️ 초저배당</div>' : ''}
                 </div>
                 <div style="background:#1a1a3e;border-radius:6px;padding:5px 12px;text-align:center;">
                     <div style="font-size:0.75em;color:#aaa;margin-bottom:2px;">
@@ -648,18 +784,17 @@ async function loadBettingCombo() {
                         ${m.uvi}%
                     </div>
                 </div>
-            </div>`).join('')}
-
+            </div>`}).join('')}
         </div>`;
     });
 
-    // 전체 경기 요약 (접기/펼치기)
-    html += await getBettingPicksSummary(currentRound);
-
     document.getElementById('betting-result').innerHTML = html;
+
+    // 픽 요약을 맨 위에 추가
+    const summaryHtml = await getBettingPicksSummary(currentRound);
+    document.getElementById('betting-result').insertAdjacentHTML('afterbegin', summaryHtml);
 }
 
-// 조합 수 계산 C(n,k)
 function combo(n, k) {
     if (k > n) return 0;
     let r = 1;
@@ -667,50 +802,219 @@ function combo(n, k) {
     return Math.round(r);
 }
 
-// 전체 경기 리스트 (참고용)
+// ================================
+// 픽 배당값 계산 헬퍼
+// ================================
+function getPickOdds(m) {
+    // 언오버 픽 → OU 배당 사용
+    if (m.auto_switched && m.ou_data && m.ou_data.ou_odds) {
+        const rec = m.ou_data.recommendation;
+        return rec === 'OVER'
+            ? m.ou_data.ou_odds.over
+            : m.ou_data.ou_odds.under;
+    }
+    // 언오버인데 배당 없으면 신뢰도 역산
+    if (m.auto_switched) {
+        return parseFloat((m.confidence / 100 + 1).toFixed(2));
+    }
+    // 1x2 픽 → 해당 배당
+    if (m.odds) {
+        if (m.best_outcome === 'home_win') return m.odds.home;
+        if (m.best_outcome === 'away_win') return m.odds.away;
+        return m.odds.draw;
+    }
+    // 배당 없으면 폴백
+    return parseFloat((m.confidence / 100 + 1).toFixed(2));
+}
+
 async function getBettingPicksSummary(round) {
     const res  = await fetch(`/api/betting_picks/${round}`);
     const data = await res.json();
 
-    const rec   = data.filter(m => m.recommended);
-    const risky = data.filter(m => !m.recommended && m.uvi >= 35);
+    // 날짜순 정렬
+    const byDate = [...data].sort((a, b) => a.date.localeCompare(b.date));
 
     let html = `
-    <div class="card" style="border:1px solid #333;margin-top:10px;">
-        <h3 style="margin-bottom:15px;color:#aaa;font-size:1em;">📋 전체 경기 요약</h3>`;
+    <div class="card" style="border:1px solid #4a4aff33;margin-top:15px;">
+        <h3 style="margin-bottom:15px;font-size:1em;">
+            📋 ${round}라운드 전체 경기 픽
+            <span style="color:#aaa;font-size:0.8em;font-weight:normal;margin-left:8px;">
+                추천 ${data.filter(m=>m.recommended).length}경기 / 전체 ${data.length}경기
+            </span>
+        </h3>
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:30px;">조</th>
+                    <th>경기</th>
+                    <th>날짜</th>
+                    <th style="text-align:center;">홈승</th>
+                    <th style="text-align:center;">무</th>
+                    <th style="text-align:center;">원정승</th>
+                    <th style="text-align:center;">최종 픽</th>
+                    <th style="text-align:center;">신뢰도</th>
+                    <th style="text-align:center;">이변</th>
+                    <th style="text-align:center;">🛒</th>
+                </tr>
+            </thead>
+            <tbody>`;
 
-    if (rec.length > 0) {
-        html += `<div style="margin-bottom:12px;">
-            <div style="color:#4aff4a;font-size:0.85em;margin-bottom:8px;">⭐ 추천 (${rec.length}경기)</div>`;
-        rec.forEach(m => {
-            // 언오버 자동전환 뱃지
-            const ouBadge = m.auto_switched
-                ? `<span style="background:#ff9900;color:#000;border-radius:4px;
-                               padding:1px 5px;font-size:0.72em;margin-right:4px;vertical-align:middle;">⇄ 언오버</span>`
-                : '';
-            const pickColor = m.auto_switched ? '#ff9900' : '#4aff4a';
-            html += `<div style="display:flex;justify-content:space-between;align-items:center;
-                                 padding:6px 0;border-bottom:1px solid #1a1a3e;font-size:0.85em;">
-                <span>${m.home} vs ${m.away}</span>
-                <span style="color:${pickColor};font-weight:bold;">${ouBadge}${m.pick_label} ${m.confidence}%</span>
-            </div>`;
-        });
-        html += '</div>';
-    }
+    byDate.forEach(m => {
+        const pickColor = m.recommended ? '#00ff88' : '#aaa';
+        const recBadge  = m.recommended
+            ? '<span style="color:#00ff88;font-size:0.8em;">✅</span>'
+            : '<span style="color:#555;font-size:0.8em;">-</span>';
 
-    if (risky.length > 0) {
-        html += `<div>
-            <div style="color:#ff7777;font-size:0.85em;margin-bottom:8px;">⚡ 이변주의 (${risky.length}경기)</div>`;
-        risky.forEach(m => {
-            html += `<div style="display:flex;justify-content:space-between;padding:6px 0;
-                                 border-bottom:1px solid #1a1a3e;font-size:0.85em;color:#aaa;">
-                <span>${m.home} vs ${m.away}</span>
-                <span>UVI ${m.uvi}%</span>
-            </div>`;
-        });
-        html += '</div>';
-    }
+        const ouBadge = m.auto_switched
+            ? `<span style="background:#ff9900;color:#000;border-radius:3px;
+                           padding:1px 4px;font-size:0.7em;margin-right:3px;">⇄</span>`
+            : '';
 
-    html += '</div>';
+        const maxProb = Math.max(m.home_win, m.draw, m.away_win);
+        const hStyle  = m.home_win === maxProb ? 'color:#fff;font-weight:bold;' : 'color:#555;';
+        const dStyle  = m.draw     === maxProb ? 'color:#ffbb44;font-weight:bold;' : 'color:#555;';
+        const aStyle  = m.away_win === maxProb ? 'color:#fff;font-weight:bold;' : 'color:#555;';
+
+        const uviColor = m.uvi >= 50 ? '#ff4444' : m.uvi >= 35 ? '#ffbb44' : '#00ff88';
+
+        // 픽 배당값 계산
+        const pickOdds = getPickOdds(m);
+        const matchKey = `${m.home} vs ${m.away}`;
+        // 픽 라벨에 배당 표시
+        const pickLabelWithOdds = pickOdds
+            ? `${m.pick_label} <span style="color:#4aff4a;font-size:0.8em;">x${pickOdds}</span>`
+            : m.pick_label;
+
+        html += `
+            <tr style="border-bottom:1px solid #1a1a2e;cursor:pointer;"
+                onclick="addToCart('${matchKey.replace(/'/g,"\\'")}', '${m.pick_label.replace(/'/g,"\\'")}', ${pickOdds})">
+                <td style="color:#aaa;font-size:0.85em;">${m.group}</td>
+                <td>
+                    <span style="font-weight:bold;">${m.home}</span>
+                    <span style="color:#555;font-size:0.8em;"> vs </span>
+                    <span style="font-weight:bold;">${m.away}</span>
+                </td>
+                <td style="color:#aaa;font-size:0.8em;white-space:nowrap;">${m.date}</td>
+                <td style="text-align:center;${hStyle}">${m.home_win}%</td>
+                <td style="text-align:center;${dStyle}">${m.draw}%</td>
+                <td style="text-align:center;${aStyle}">${m.away_win}%</td>
+                <td style="text-align:center;">
+                    ${ouBadge}
+                    <span style="color:${pickColor};font-weight:bold;font-size:0.9em;">${m.pick_label}</span>
+                    <span style="margin-left:4px;">${recBadge}</span>
+                </td>
+                <td style="text-align:center;">
+                    <span style="color:${m.confidence>=65?'#00ff88':m.confidence>=55?'#ffbb44':'#aaa'};font-weight:bold;">
+                        ${m.confidence}%
+                    </span>
+                </td>
+                <td style="text-align:center;">
+                    <span style="color:${uviColor};font-weight:bold;font-size:0.85em;">${m.uvi}%</span>
+                </td>
+                <td style="text-align:center;">
+                    <span style="color:#4aff4a;font-size:0.85em;font-weight:bold;">
+                        ${pickOdds ? 'x'+pickOdds : '+'}
+                    </span>
+                </td>
+            </tr>`;
+    });
+
+    html += `
+            </tbody>
+        </table>
+        <div style="margin-top:10px;display:flex;gap:16px;font-size:0.75em;color:#555;flex-wrap:wrap;">
+            <span>✅ = 추천픽 (신뢰도 55%+, 이변 35% 미만)</span>
+            <span>⇄ = 언오버 자동전환</span>
+            <span style="color:#4aff4a;">행 클릭 → 🛒 카트 추가</span>
+        </div>
+    </div>`;
+
     return html;
+}
+
+// ================================
+// 🛒 플로팅 베팅 카트
+// ================================
+
+let cartItems = {};
+let cartOpen  = true;
+
+function toggleCart() {
+    cartOpen = !cartOpen;
+    document.getElementById('cart-body').style.display = cartOpen ? 'block' : 'none';
+    document.getElementById('cart-toggle-icon').textContent = cartOpen ? '▲' : '▼';
+}
+
+function addToCart(matchKey, label, odds) {
+    // 같은 경기 다시 누르면 제거 (토글)
+    if (cartItems[matchKey]) {
+        removeFromCart(matchKey);
+        return;
+    }
+    cartItems[matchKey] = { label, odds: parseFloat(odds) };
+    renderCart();
+
+    // 카트 닫혀있으면 자동으로 열기
+    if (!cartOpen) toggleCart();
+}
+
+function removeFromCart(matchKey) {
+    delete cartItems[matchKey];
+    renderCart();
+}
+
+function clearCart() {
+    cartItems = {};
+    renderCart();
+}
+
+function renderCart() {
+    const keys  = Object.keys(cartItems);
+    const count = keys.length;
+
+    document.getElementById('cart-count').textContent = count;
+    document.getElementById('cart-count').style.background = count > 0 ? '#4a4aff' : '#333';
+
+    const itemsEl = document.getElementById('cart-items');
+    const totalEl = document.getElementById('cart-total');
+
+    if (count === 0) {
+        itemsEl.innerHTML = `
+            <div style="color:#555;text-align:center;padding:15px;font-size:0.85em;">
+                경기 픽을 추가하세요 🎯
+            </div>`;
+        totalEl.style.display = 'none';
+        return;
+    }
+
+    let totalOdds = 1;
+    let html = '';
+    keys.forEach(key => {
+        const item = cartItems[key];
+        totalOdds *= item.odds;
+        html += `
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:6px 0;border-bottom:1px solid #1a1a3e;gap:8px;">
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:0.78em;color:#aaa;overflow:hidden;
+                            text-overflow:ellipsis;white-space:nowrap;">${key}</div>
+                <div style="font-size:0.85em;color:#fff;font-weight:bold;">${item.label}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                <span style="color:#4aff4a;font-weight:bold;">x${item.odds}</span>
+                <button onclick="removeFromCart('${key.replace(/'/g, "\\'")}')"
+                    style="background:none;border:none;color:#555;cursor:pointer;
+                           font-size:1em;padding:0;line-height:1;">✕</button>
+            </div>
+        </div>`;
+    });
+    itemsEl.innerHTML = html;
+
+    totalEl.style.display = 'block';
+    const color = totalOdds >= 3 ? '#00ff88' : totalOdds >= 2 ? '#ffbb44' : '#aaa';
+    document.getElementById('cart-total-odds').textContent = `x${totalOdds.toFixed(2)}`;
+    document.getElementById('cart-total-odds').style.color = color;
+    document.getElementById('cart-total-payout').textContent =
+        `10,000원 → ${Math.round(totalOdds * 10000).toLocaleString()}원`;
+    document.getElementById('cart-total-payout').style.color = color;
 }

@@ -282,25 +282,43 @@ MATCH_ODDS_1X2 = {
     ('Panama',                  'Croatia'):               (6.70, 3.80,  1.55),
     ('Colombia',                'DR Congo'):              (1.47, 4.20,  7.10),
 }
-
+# --------------------------------
+# 경기별 언오버 배당 (유럽식 소수 배당)
+# 기준선: 2.5골
+# 구조: (홈팀, 어웨이팀): {'over': 오버배당, 'under': 언더배당}
+# --------------------------------
+MATCH_ODDS_OU = {
+    # ===== 1라운드 =====
+    ('Canada',        'Bosnia and Herzegovina'): {'over': 2.25, 'under': 1.66},
+    ('United States', 'Paraguay'):               {'over': 2.45, 'under': 1.54},
+    ('Qatar',         'Switzerland'):            {'over': 1.68, 'under': 2.19},
+    ('Brazil',        'Morocco'):                {'over': 2.05, 'under': 1.79},
+    ('Australia',     'Turkey'):                 {'over': 2.01, 'under': 1.82},
+    ('Ivory Coast',   'Ecuador'):                {'over': 2.84, 'under': 1.42},
+    ('Sweden',        'Tunisia'):                {'over': 2.17, 'under': 1.69},
+    ('Netherlands',   'Japan'):                  {'over': 1.93, 'under': 1.89},
+    ('France',        'Senegal'):                {'over': 1.97, 'under': 1.85},
+    ('Ghana',         'Panama'):                 {'over': 2.25, 'under': 1.63},
+}
 # --------------------------------
 # 앙상블 가중치
 # 백테스트 후 최적화 예정
 # --------------------------------
 ENSEMBLE_WEIGHTS = {
-    'ml':         0.15,   # ML 비중 축소 (PL 실험: 승무패 구조적 한계)
-    'opta':       0.15,   # Opta 비중 축소
-    'betting':    0.35,   # 배당률 최우선 유지
-    'elo':        0.25,   # ELO 유지
-    'motivation': 0.05,   # 동기부여지수 신규 (이미 통과/탈락/반드시 이겨야)
-    'feedback':   0.05,   # 경기내용 피드백루프 신규 (이전 경기 xG 반영)
+    'ml':         0.20,   # 15% → 20%
+    'opta':       0.10,   # 15% → 10%
+    'betting':    0.20,   # 35% → 20% (핵심 인하)
+    'elo':        0.15,   # 25% → 15%
+    'form':       0.15,   # 신규: TEAM_FORM_INDEX 독립 반영
+    'strength':   0.10,   # 신규: FC25 + market 복합 강도
+    'motivation': 0.05,
+    'feedback':   0.05,
 }
-
 # --------------------------------
 # 동기부여 지수 설정
 # --------------------------------
 MOTIVATION_CONFIG = {
-    'already_qualified': -2,   # 이미 16강 통과 → 동기 낮음
+    'already_qualified': -3,   # 이미 16강 통과 → 동기 낮음 (2022: 4건 이변 미감지)
     'already_eliminated': -3,  # 이미 탈락 확정 → 완전 의욕 상실
     'must_win': +3,            # 반드시 이겨야 → 동기 최고
     'pride_factor': +1,        # 강팀 자존심 (빌라가 챔스 확정됐어도 맨시티 이긴 것처럼)
@@ -311,10 +329,20 @@ MOTIVATION_CONFIG = {
 # 오버/언더 자동 전환 설정
 # --------------------------------
 OVER_UNDER_CONFIG = {
-    'confidence_threshold': 0.60,   # 1x2 신뢰도 < 60% → 언오버 전환
-    'group_stage_line': 2.5,        # 조별리그 기준선 (축구 표준)
+    'confidence_threshold': 0.55,   # 1x2 신뢰도 < 55% → 언오버 전환
+    'group_stage_line': 2.5,        # 조별리그 기준선
     'knockout_line': 2.5,           # 토너먼트 기준선
     'group_over_adjustment': 0.10,  # 조별리그 오버 약간 유리 보정
+
+    # A안: UVI 기반 강제 전환
+    # 이변지수 높은 경기는 고신뢰도여도 언오버로 전환
+    # 2022: 아르헨티나-사우디(77%), 튀니지-프랑스(76%) 등 못 잡은 케이스 방지
+    'uvi_force_ou_threshold': 0.50,  # UVI 50% 이상이면 신뢰도 무관 강제 언오버
+
+    # B안: 배당-모델 괴리 기반 전환
+    # 모델이 높은 확률 줬는데 실제 배당은 원정팀에 후함 → 시장이 더 팽팽하게 봄
+    'odds_model_gap_threshold': 20.0, # 모델확률 - 배당implied확률 > 20%p → 언오버 전환
+    'low_odds_1x2_threshold': 1.30, # 배당이 너무 낮은 경우 (예: 홈승 1.30 이하) → 언오버 전환 (시장 과신 방지)
 }
 
 # --------------------------------

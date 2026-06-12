@@ -171,7 +171,11 @@
                     <div class="label">H2H 원정팀 승률</div>
                     <div class="value" id="h2h-away">-</div>
                 </div>
-            </div>
+           </div>
+            <!-- 1번: 배당 표시 -->
+            <div id="predict-odds-area" style="margin-top:12px;"></div>
+            <!-- 3번: 저배당 뱃지 -->
+            <div id="predict-low-odds-badge" style="margin-top:6px;"></div>
         </div>
 
         <!-- 라인업 섹션 (result-box 밖으로) -->
@@ -404,5 +408,56 @@
 
 <script src="/static/js/main.js"></script>
 <script src="/static/js/advanced.js"></script>
+<!-- 🛒 플로팅 베팅 카트 -->
+<div id="bet-cart" style="
+    position:fixed; bottom:20px; right:20px; z-index:9999;
+    width:280px; background:#1a1a2e; border:1px solid #4a4aff;
+    border-radius:15px; box-shadow:0 4px 20px #0008;
+    font-size:0.85em; overflow:hidden;
+    transition: all 0.3s;">
+
+    <!-- 헤더 (클릭하면 접기/펼치기) -->
+    <div onclick="toggleCart()" style="
+        display:flex; justify-content:space-between; align-items:center;
+        padding:12px 15px; background:#2d2d4e; cursor:pointer;">
+        <span style="font-weight:bold;">🛒 베팅 카트</span>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <span id="cart-count" style="
+                background:#4a4aff; border-radius:50%;
+                width:20px; height:20px; display:flex;
+                align-items:center; justify-content:center;
+                font-size:0.75em; font-weight:bold;">0</span>
+            <span id="cart-toggle-icon">▲</span>
+        </div>
+    </div>
+
+    <!-- 카트 내용 -->
+    <div id="cart-body" style="padding:12px 15px; max-height:400px; overflow-y:auto;">
+        <div id="cart-items">
+            <div style="color:#555; text-align:center; padding:15px; font-size:0.85em;">
+                경기 픽을 추가하세요 🎯
+            </div>
+        </div>
+
+        <!-- 합산 배당 -->
+        <div id="cart-total" style="display:none; margin-top:10px;
+            background:#0d0d2e; border-radius:8px; padding:10px; text-align:center;">
+            <div style="color:#aaa; font-size:0.75em; margin-bottom:4px;">합산 배당</div>
+            <div id="cart-total-odds" style="font-size:1.8em; font-weight:bold; color:#00ff88;">x1.00</div>
+            <div id="cart-total-payout" style="color:#555; font-size:0.75em; margin-top:3px;">
+                10,000원 → 10,000원
+            </div>
+        </div>
+
+        <!-- 버튼 -->
+        <div style="display:flex; gap:6px; margin-top:10px;">
+            <button onclick="clearCart()" style="
+                flex:1; padding:7px; background:#2a2a4e; border:none;
+                border-radius:6px; color:#aaa; cursor:pointer; font-size:0.8em;">
+                🗑️ 초기화
+            </button>
+        </div>
+    </div>
+</div>
 </body>
 </html>
